@@ -410,12 +410,14 @@ Disable coverage for these reasons:
 - Accepts `lowest` to set up the lowest supported PHP version.
 - Accepts `highest` or `latest` to set up the latest stable PHP version.
 - Accepts `nightly` to set up a nightly build from the master branch of PHP.
+- Accepts `pre-installed` to set up the highest pre-installed PHP version. You can combine this with `update: true` to update the pre-installed PHP version.
 - Accepts the format `d.x`, where `d` is the major version. For example `5.x`, `7.x` and `8.x`.  
 - See [PHP support](#tada-php-support) for the supported PHP versions.
 - If not specified, it looks for the following in order:
   - The `php-version-file` input if it exists
   - A `composer.lock` file and the `platform-overrides.php` value
   - A `composer.json` file and the `config.platform.php` value
+  - If the `composer.lock` or `composer.json` file is in a sub-directory in your repository, please specify the subdirectory path in `COMPOSER_PROJECT_DIR` env.
 
 #### `php-version-file` (optional)
 
@@ -423,6 +425,7 @@ Disable coverage for these reasons:
 - Accepts a `string`. For example `'.phpenv-version'`.
 - See [PHP support](#tada-php-support) for the supported PHP versions.
 - By default, `.php-version` file is used.
+- The file either have the PHP version as its content, or follow the asdf `.tool-versions` format.
 - If not specified and the default `.php-version` file is not found, the latest stable PHP version is set up.
 
 #### `extensions` (optional)

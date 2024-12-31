@@ -63,7 +63,12 @@ read_env() {
 
   # Set Update to true if the ubuntu github image does not have PHP PPA.
   if [[ "$runner" = "github" && "${ImageOS}" =~ ubuntu.* ]]; then
-    check_ppa ondrej/php || update=true
+    if ! check_ppa ondrej/php; then
+      update=true
+      echo '' | sudo tee /tmp/sp_update >/dev/null 2>&1
+    elif [ -e /tmp/sp_update ]; then
+      update=true
+    fi
   fi
 
   export fail_fast
@@ -175,6 +180,19 @@ self_hosted_setup() {
     else
       self_hosted_helper >/dev/null 2>&1
       add_env RUNNER_TOOL_CACHE /tmp
+    fi
+  fi
+}
+
+# Function to check pre-installed PHP
+check_pre_installed() {
+  if [ "$version" = "pre" ]; then
+    if [ -n "$php_config" ]; then
+      version="$(php_semver | cut -c 1-3)"
+      update=false
+    else
+      fail_fast=true
+      add_log "$cross" "PHP" "No pre-installed PHP version found"
     fi
   fi
 }

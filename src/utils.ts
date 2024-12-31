@@ -436,12 +436,17 @@ export async function readPHPVersion(): Promise<string> {
   const versionFile =
     (await getInput('php-version-file', false)) || '.php-version';
   if (fs.existsSync(versionFile)) {
-    return fs.readFileSync(versionFile, 'utf8').replace(/[\r\n]/g, '');
+    const contents: string = fs.readFileSync(versionFile, 'utf8');
+    const match: RegExpMatchArray | null = contents.match(
+      /^(?:php\s)?(\d+\.\d+\.\d+)$/m
+    );
+    return match ? match[1] : contents.trim();
   } else if (versionFile !== '.php-version') {
     throw new Error(`Could not find '${versionFile}' file.`);
   }
 
-  const composerLock = 'composer.lock';
+  const composerProjectDir = await readEnv('COMPOSER_PROJECT_DIR');
+  const composerLock = path.join(composerProjectDir, 'composer.lock');
   if (fs.existsSync(composerLock)) {
     const lockFileContents = JSON.parse(fs.readFileSync(composerLock, 'utf8'));
     if (
@@ -452,7 +457,7 @@ export async function readPHPVersion(): Promise<string> {
     }
   }
 
-  const composerJson = 'composer.json';
+  const composerJson = path.join(composerProjectDir, 'composer.json');
   if (fs.existsSync(composerJson)) {
     const composerFileContents = JSON.parse(
       fs.readFileSync(composerJson, 'utf8')
