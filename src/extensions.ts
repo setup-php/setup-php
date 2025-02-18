@@ -32,20 +32,20 @@ export async function addExtensionDarwin(
         add_script += await utils.parseExtensionSource(extension, ext_prefix);
         return;
       // match 7.4relay...8.5relay
-      // match 5.3blackfire...8.3blackfire
-      // match 5.3blackfire-(semver)...8.3blackfire-(semver)
+      // match 5.3blackfire...8.4blackfire
+      // match 5.3blackfire-(semver)...8.4blackfire-(semver)
       // match couchbase, event, geos, pdo_oci, oci8, http, pecl_http
-      // match 5.3ioncube...8.2ioncube
+      // match 5.3ioncube...8.4ioncube
       // match 7.0phalcon3...7.3phalcon3, 7.2phalcon4...7.4phalcon4, and 7.4phalcon5...8.3phalcon5
       // match 7.0zephir_parser...8.3zephir_parser
       case /^(7\.4|8\.[0-5])relay(-v?\d+\.\d+\.\d+)?$/.test(version_extension):
-      case /^(5\.[3-6]|7\.[0-4]|8\.[0-3])blackfire(-\d+\.\d+\.\d+)?$/.test(
+      case /^(5\.[3-6]|7\.[0-4]|8\.[0-4])blackfire(-\d+\.\d+\.\d+)?$/.test(
         version_extension
       ):
       case /^couchbase|^event|^gearman$|^geos$|^pdo_oci$|^oci8$|^(pecl_)?http|^pdo_firebird$/.test(
         extension
       ):
-      case /^(5\.[3-6]|7\.[0-4]|8\.[0-2])ioncube$/.test(version_extension):
+      case /^(5\.[3-6]|7\.[0-4]|8\.[0-4])ioncube$/.test(version_extension):
       case /(5\.6|7\.[0-3])phalcon3|7\.[2-4]phalcon4|(7\.4|8\.[0-3])phalcon5?/.test(
         version_extension
       ):
@@ -134,18 +134,18 @@ export async function addExtensionWindows(
       case /^none$/.test(ext_name):
         add_script += '\nDisable-AllShared';
         break;
-      // match 5.3blackfire...8.3blackfire
-      // match 5.3blackfire-(semver)...8.3blackfire-(semver)
+      // match 5.3blackfire...8.4blackfire
+      // match 5.3blackfire-(semver)...8.4blackfire-(semver)
       // match pdo_oci and oci8
-      // match 5.3ioncube...8.2ioncube
+      // match 5.3ioncube...8.4ioncube
       // match 7.0phalcon3...7.3phalcon3, 7.2phalcon4...7.4phalcon4, and 7.4phalcon5...8.3phalcon5
       // match 7.1pecl_http...8.1pecl_http and 7.1http...8.1http
       // match 7.0zephir_parser...8.3zephir_parser
-      case /^(5\.[3-6]|7\.[0-4]|8\.[0-3])blackfire(-\d+\.\d+\.\d+)?$/.test(
+      case /^(5\.[3-6]|7\.[0-4]|8\.[0-4])blackfire(-\d+\.\d+\.\d+)?$/.test(
         version_extension
       ):
       case /^pdo_oci$|^oci8$|^pdo_firebird$/.test(extension):
-      case /^(5\.[3-6]|7\.[0-4]|8\.[0-2])ioncube$/.test(version_extension):
+      case /^(5\.[3-6]|7\.[0-4]|8\.[0-4])ioncube$/.test(version_extension):
       case /^7\.[0-3]phalcon3$|^7\.[2-4]phalcon4$|^(7\.4|8\.[0-3])phalcon5?$/.test(
         version_extension
       ):
@@ -264,15 +264,15 @@ export async function addExtensionLinux(
         add_script += await utils.parseExtensionSource(extension, ext_prefix);
         return;
       // match 7.4relay...8.5relay
-      // match 5.3blackfire...8.3blackfire
-      // match 5.3blackfire-(semver)...8.3blackfire-(semver)
+      // match 5.3blackfire...8.4blackfire
+      // match 5.3blackfire-(semver)...8.4blackfire-(semver)
       // match 5.3pdo_cubrid...7.2php_cubrid, 5.3cubrid...7.4cubrid
       // match couchbase, geos, pdo_oci, oci8, http, pecl_http
-      // match 5.3ioncube...8.2ioncube
+      // match 5.3ioncube...8.4ioncube
       // match 7.0phalcon3...7.3phalcon3, 7.2phalcon4...7.4phalcon4, 7.4phalcon5...8.3phalcon5
       // match 7.0zephir_parser...8.3zephir_parser
       case /^(7\.4|8\.[0-5])relay(-v?\d+\.\d+\.\d+)?$/.test(version_extension):
-      case /^(5\.[3-6]|7\.[0-4]|8\.[0-3])blackfire(-\d+\.\d+\.\d+)?$/.test(
+      case /^(5\.[3-6]|7\.[0-4]|8\.[0-4])blackfire(-\d+\.\d+\.\d+)?$/.test(
         version_extension
       ):
       case /^((5\.[3-6])|(7\.[0-2]))pdo_cubrid$|^((5\.[3-6])|(7\.[0-4]))cubrid$/.test(
@@ -282,7 +282,7 @@ export async function addExtensionLinux(
         extension
       ):
       case /(?<!5\.[3-5])intl-\d+\.\d+$/.test(version_extension):
-      case /^(5\.[3-6]|7\.[0-4]|8\.[0-2])ioncube$/.test(version_extension):
+      case /^(5\.[3-6]|7\.[0-4]|8\.[0-4])ioncube$/.test(version_extension):
       case /^7\.[0-3]phalcon3$|^7\.[2-4]phalcon4$|^(7\.4|8\.[0-3])phalcon5?$/.test(
         version_extension
       ):
