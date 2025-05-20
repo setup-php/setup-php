@@ -69,7 +69,6 @@ add_brew_extension() {
   else
     add_brew_tap "$php_tap"
     add_brew_tap "$ext_tap"
-    sudo mv "$tap_dir"/"$ext_tap"/.github/deps/"$formula"/* "${core_repo:?}/Formula/" 2>/dev/null || true
     update_dependencies >/dev/null 2>&1
     handle_dependency_extensions "$formula" "$extension" >/dev/null 2>&1
     (brew install "${brew_opts[@]}" "$ext_tap/$formula@$version" >/dev/null 2>&1 && copy_brew_extensions "$formula") || pecl_install "$extension" >/dev/null 2>&1
@@ -136,7 +135,9 @@ update_dependencies() {
   patch_brew
   if ! [ -e /tmp/update_dependencies ]; then
     for repo in "$brew_repo" "$core_repo"; do
-      git_retry -C "$repo" fetch origin master && git -C "$repo" reset --hard origin/master
+      if [ -e "$repo" ]; then
+        git_retry -C "$repo" fetch origin master && git -C "$repo" reset --hard origin/master
+      fi
     done
     echo '' | sudo tee /tmp/update_dependencies >/dev/null 2>&1
   fi
@@ -207,6 +208,11 @@ get_scan_dir() {
   else
     echo "$ini_dir"/conf.d
   fi
+}
+
+# Function to handle self-hosted runner setup.
+self_hosted_helper() {
+  :
 }
 
 # Function to Setup PHP.
