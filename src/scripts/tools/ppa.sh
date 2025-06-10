@@ -129,7 +129,8 @@ add_list() {
     arch=$(dpkg --print-architecture)
     [ -e "$key_source" ] && key_file=$key_source || key_file="$key_dir"/"${ppa/\//-}"-keyring.gpg
     add_key "$ppa" "$ppa_url" "$package_dist" "$key_source" "$key_file"
-    echo "deb [arch=$arch signed-by=$key_file] $ppa_url $package_dist $branches" | sudo tee -a "$list_dir"/"${ppa/\//-}".list >/dev/null 2>&1
+    sudo rm -rf "$list_dir"/"${ppa/\//-}".list || true
+    echo "deb [arch=$arch signed-by=$key_file] $ppa_url $package_dist $branches" | sudo tee -a "$list_dir"/"${ppa%%/*}"-"$ID"-"${ppa#*/}"-"$package_dist".list >/dev/null 2>&1
     update_lists "$ppa" "$ppa_search"
     . /etc/os-release
   fi
@@ -181,6 +182,7 @@ add_ppa() {
   ppa=${1:-ondrej/php}
   if [[ "$ID" = "ubuntu" || "$ID_LIKE" =~ ubuntu ]] && [[ "$ppa" =~ "ondrej/" ]]; then
     if is_ubuntu_ppa_up "$ppa" ; then
+      [ "${runner:?}" = "self-hosted" ] && find "$list_dir" -type f -name 'sp*' -exec grep -qF "$sp" {} \; -delete
       [ "${debug:?}" = "debug" ] && add_list "$ppa" "$lpc_ppa/$ppa/ubuntu" "$lpc_ppa/$ppa/ubuntu" "$VERSION_CODENAME" "main/debug"
       add_list "$ppa"
     else
