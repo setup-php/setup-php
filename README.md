@@ -229,7 +229,7 @@ This disables all core and third-party shared extensions and thus, can break som
 
 These tools can be set up globally using the `tools` input. It accepts a string in csv-format.
 
-[`behat`], [`blackfire`], [`blackfire-player`], [`box`], [`castor`], [`churn`], [`codeception`], [`composer`], [`composer-dependency-analyser`], [`composer-normalize`], [`composer-prefetcher`], [`composer-require-checker`], [`composer-unused`], [`cs2pr`], [`deployer`], [`ecs`], [`flex`], [`grpc_php_plugin`], [`infection`], [`parallel-lint`], [`pecl`], [`phan`], [`phing`], [`phinx`], [`phive`], [`php-config`], [`php-cs-fixer`], [`php-scoper`], [`phpcbf`], [`phpcpd`], [`phpcs`], [`phpdoc`] or [`phpDocumentor`], [`phpize`], [`phplint`], [`phpmd`], [`phpspec`], [`phpstan`], [`phpunit`], [`phpunit-bridge`], [`phpunit-polyfills`], [`pie`], [`pint`], [`prestissimo`], [`protoc`], [`psalm`], [`rector`], [`symfony`] or [`symfony-cli`], [`vapor`] or [`vapor-cli`], [`wp`] or [`wp-cli`]
+[`backward-compatibility-check`], [`behat`], [`blackfire`], [`blackfire-player`], [`box`], [`castor`], [`churn`], [`codeception`], [`composer`], [`composer-dependency-analyser`], [`composer-normalize`], [`composer-prefetcher`], [`composer-require-checker`], [`composer-unused`], [`cs2pr`], [`deployer`], [`ecs`], [`flex`], [`grpc_php_plugin`], [`infection`], [`mago`], [`name-collision-detector`], [`parallel-lint`], [`pecl`], [`phan`], [`phing`], [`phinx`], [`phive`], [`php-config`], [`php-cs-fixer`], [`php-scoper`], [`phpcbf`], [`phpcpd`], [`phpcs`], [`phpdoc`] or [`phpDocumentor`], [`phpize`], [`phplint`], [`phpmd`], [`phpspec`], [`phpstan`], [`phpunit`], [`phpunit-bridge`], [`phpunit-polyfills`], [`pie`], [`pint`], [`prestissimo`], [`protoc`], [`psalm`], [`rector`], [`symfony`] or [`symfony-cli`], [`vapor`] or [`vapor-cli`], [`wp`] or [`wp-cli`]
 
 ```yaml
 - name: Setup PHP with tools
@@ -257,19 +257,6 @@ These tools can be set up globally using the `tools` input. It accepts a string 
   - Major and minor version. For example `tool:1.2` or `tool:1.2.x`.
 
   When you specify just the major version or the version in `major.minor` format, the latest patch version matching the input will be setup.
-
-  With the exception of major versions of `composer`, if you specify only the `major` version or the version in `major.minor` format for a tool you can get rate limited by GitHub's API. To avoid this, it is recommended to provide a [`GitHub` OAuth token](https://github.com/shivammathur/setup-php#github-composer-authentication "Composer GitHub OAuth").
-  You can do that by setting `GITHUB_TOKEN` environment variable. The `COMPOSER_TOKEN` environment variable has been deprecated in favor of `GITHUB_TOKEN` and will be removed in the next major version.
-
-```yaml
-- name: Setup PHP with tools
-  uses: shivammathur/setup-php@v2
-  with:
-    php-version: '8.4'
-    tools: php-cs-fixer:3.64, phpunit:11.4
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
 
 - The latest stable version of `composer` is set up by default. You can set up the required `composer` version by specifying the major version `v1` or `v2`, or the version in `major.minor` or `semver` format. Additionally, for composer `snapshot` and `preview` can also be specified to set up the respective releases.
 
@@ -430,7 +417,7 @@ Disable coverage for these reasons:
   - The `php-version-file` input if it exists
   - A `composer.lock` file and the `platform-overrides.php` value
   - A `composer.json` file and the `config.platform.php` value
-  - If the `composer.lock` or `composer.json` file is in a sub-directory in your repository, please specify the subdirectory path in `COMPOSER_PROJECT_DIR` env.
+  - If the `composer.lock` or `composer.json` file is in a subdirectory in your repository, please specify the subdirectory path in `COMPOSER_PROJECT_DIR` env.
 
 #### `php-version-file` (optional)
 
@@ -438,7 +425,7 @@ Disable coverage for these reasons:
 - Accepts a `string`. For example `'.phpenv-version'`.
 - See [PHP support](#tada-php-support) for the supported PHP versions.
 - By default, `.php-version` file is used.
-- The file either have the PHP version as its content, or follow the asdf `.tool-versions` format.
+- The file needs to either have the PHP version as its content or follows the asdf `.tool-versions` format.
 - If not specified and the default `.php-version` file is not found, the latest stable PHP version is set up.
 
 #### `extensions` (optional)
@@ -472,6 +459,12 @@ Disable coverage for these reasons:
 - Specify the tools you want to set up.
 - Accepts a `string` in csv-format. For example: `phpunit, phpcs`
 - See [tools support](#wrench-tools-support) for tools supported.
+
+#### `github-token` (optional)
+
+- Specify the GitHub token to use for authentication.
+- Accepts a `string`.
+- By default, `GITHUB_TOKEN` secret provided by GitHub Actions is used.
 
 ### Outputs
 
@@ -561,8 +554,6 @@ jobs:
         ini-values: post_max_size=256M, max_execution_time=180
         coverage: xdebug
         tools: php-cs-fixer, phpunit:${{ matrix.phpunit-versions }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### Nightly Build Setup
@@ -804,17 +795,16 @@ restore-keys: ${{ runner.os }}-composer-${{ matrix.prefer }}-
 
 ### GitHub Composer Authentication
 
-If you have a number of workflows which set up multiple tools or have many composer dependencies, you might hit the GitHub's rate limit for composer. Also, if you specify only the major version or the version in `major.minor` format, you can hit the rate limit. To avoid this you can specify an `OAuth` token by setting `GITHUB_TOKEN` environment variable. You can use [`GITHUB_TOKEN`](https://help.github.com/en/actions/configuring-and-managing-workflows/authenticating-with-the-github_token "GITHUB_TOKEN documentation") secret for this purpose.
+By default, setup-php uses the `GITHUB_TOKEN` secret that is generated for each workflow run. In case you want to use a Personal Access Token (PAT) instead, you can set the `github-token` input.
 
-The `COMPOSER_TOKEN` environment variable has been deprecated in favor of `GITHUB_TOKEN` and will be removed in the next major version.
+The `COMPOSER_TOKEN` and `GITHUB_TOKEN` environment variables have been deprecated in favor of the `github-token` input and will be removed in the next major version.
 
 ```yaml
 - name: Setup PHP
   uses: shivammathur/setup-php@v2
   with:
     php-version: '8.4'
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    github-token: ${{ secrets.YOUR_PAT_TOKEN }}
 ```
 
 ### Private Packagist Authentication
@@ -1015,19 +1005,26 @@ Many users and organisations support setup-php via [GitHub Sponsors](https://git
 These companies generously provide setup-php their products and services to aid in the development of this project.
 
 <p>
-  <a href="https://www.jetbrains.com/?from=setup-php">
-    <img src="https://setup-php.com/sponsors/jetbrains.svg" alt="JetBrains" width="212" height="120">
+  <a target="_blank" href="https://www.jetbrains.com/?from=setup-php">
+    <img src="https://setup-php.com/sponsors/jetbrains.svg" alt="JetBrains" width="140" height="80">
   </a>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.macstadium.com/opensource/members#gh-light-mode-only">
-    <img src="https://setup-php.com/sponsors/macstadium.png" alt="Mac Stadium" width="296" height="120">
+  <a target="_blank" href="https://www.cloudflare.com/lp/project-alexandria/#gh-light-mode-only">
+    <img src="https://setup-php.com/sponsors/cloudflare.svg" alt="Cloudflare" width="240" height="80">
   </a>
-  <a href="https://www.macstadium.com/opensource/members#gh-dark-mode-only">
-    <img src="https://setup-php.com/sponsors/macstadium-white.png" alt="Mac Stadium" width="296" height="120">
+  <a target="_blank" href="https://www.cloudflare.com/lp/project-alexandria/#gh-dark-mode-only">
+    <img src="https://setup-php.com/sponsors/cloudflare-white.svg" alt="Cloudflare" width="240" height="80">
   </a>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://tidelift.com/subscription/pkg/npm-setup-php">
-    <img src="https://setup-php.com/sponsors/tidelift.png" alt="Tidelift" width="140" height="120">
+  <a target="_blank" href="https://www.macstadium.com/company/opensource#gh-light-mode-only">
+    <img src="https://setup-php.com/sponsors/macstadium.png" alt="Mac Stadium" width="200" height="80">
+  </a>
+  <a target="_blank" href="https://www.macstadium.com/company/opensource#gh-dark-mode-only">
+    <img src="https://setup-php.com/sponsors/macstadium-white.png" alt="Mac Stadium" width="200" height="80">
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <a target="_blank" href="#">
+    <img src="https://setup-php.com/sponsors/tidelift.png" alt="Tidelift" width="94" height="80">
   </a>
 </p>
 
@@ -1056,6 +1053,7 @@ These companies generously provide setup-php their products and services to aid 
 
 
 <!-- Links to tools -->
+[`backward-compatibility-check`]: https://github.com/Roave/BackwardCompatibilityCheck
 [`behat`]:                    https://docs.behat.org/en/latest/
 [`blackfire`]:                https://blackfire.io/docs/php/index
 [`blackfire-player`]:         https://blackfire.io/docs/builds-cookbooks/player
@@ -1075,6 +1073,8 @@ These companies generously provide setup-php their products and services to aid 
 [`flex`]:                     https://flex.symfony.com/
 [`grpc_php_plugin`]:          https://grpc.io/
 [`infection`]:                https://infection.github.io/
+[`mago`]:                     https://github.com/carthage-software/mago
+[`name-collision-detector`]:  https://github.com/shipmonk/name-collision-detector
 [`parallel-lint`]:            https://github.com/php-parallel-lint/PHP-Parallel-Lint
 [`pecl`]:                     https://pecl.php.net/
 [`phan`]:                     https://github.com/phan/phan/wiki

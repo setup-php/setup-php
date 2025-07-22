@@ -31,7 +31,7 @@ set_base_version() {
   else
     set_base_version_codename
     set_base_version_id
-    printf "ID=%s\nVERSION_ID=%s\nVERSION_CODENAME=%s\n" "$ID" "$VERSION_ID" "$VERSION_CODENAME" | tee /tmp/os-release >/dev/null 2>&1
+    printf "ID=%s\nVERSION_ID=%s\nVERSION_CODENAME=%s\n" "$ID" "$VERSION_ID" "$VERSION_CODENAME" | tee /tmp/os-release 
   fi
 }
 
@@ -59,8 +59,8 @@ update_lists() {
     list="$list_file"
   fi
   if [ ! -e "$status_file" ]; then
-    update_lists_helper "$list" >/dev/null 2>&1
-    echo '' | tee "$status_file" >/dev/null 2>&1
+    update_lists_helper "$list" 
+    echo '' | tee "$status_file" 
   fi
 }
 
@@ -95,7 +95,7 @@ add_key() {
   fi
   [ ! -e "$key_source" ] && get -q -n "$key_file" "${key_urls[@]}"
   if [[ "$(file "$key_file")" =~ .*('Public-Key (old)'|'Secret-Key') ]]; then
-    sudo gpg --batch --yes --dearmor "$key_file" >/dev/null 2>&1 && sudo mv "$key_file".gpg "$key_file"
+    sudo gpg --batch --yes --dearmor "$key_file"  && sudo mv "$key_file".gpg "$key_file"
   fi
 }
 
@@ -130,7 +130,7 @@ add_list() {
     [ -e "$key_source" ] && key_file=$key_source || key_file="$key_dir"/"${ppa/\//-}"-keyring.gpg
     add_key "$ppa" "$ppa_url" "$package_dist" "$key_source" "$key_file"
     sudo rm -rf "$list_dir"/"${ppa/\//-}".list || true
-    echo "deb [arch=$arch signed-by=$key_file] $ppa_url $package_dist $branches" | sudo tee -a "$list_dir"/"${ppa%%/*}"-"$ID"-"${ppa#*/}"-"$package_dist".list >/dev/null 2>&1
+    echo "deb [arch=$arch signed-by=$key_file] $ppa_url $package_dist $branches" | sudo tee -a "$list_dir"/"${ppa%%/*}"-"$ID"-"${ppa#*/}"-"$package_dist".list 
     update_lists "$ppa" "$ppa_search"
     . /etc/os-release
   fi
@@ -164,7 +164,7 @@ remove_list() {
 # Function to check if ubuntu ppa is up
 is_ubuntu_ppa_up() {
   ppa=${1:-ondrej/php}
-  curl -s --connect-timeout 5 --max-time 5 --head --fail "$lpc_ppa/$ppa/ubuntu/dists/$VERSION_CODENAME/Release" > /dev/null
+  curl -s --connect-timeout 10 --max-time 10 --head --fail "$lpc_ppa/$ppa/ubuntu/dists/$VERSION_CODENAME/Release" > /dev/null
 }
 
 # Function to add the PPA mirror.
@@ -172,8 +172,8 @@ add_ppa_sp_mirror() {
   ppa=$1
   ppa_name="$(basename "$ppa")"
   remove_list "$ppa" || true
-  [ "${debug:?}" = "debug" ] && add_list sp/"$ppa_name" "$sp/$ppa/ubuntu" "$sp/$ppa/ubuntu/key.gpg" "$VERSION_CODENAME" "main/debug"
-  add_list sp/"$ppa_name" "$sp/$ppa/ubuntu" "$sp/$ppa/ubuntu/key.gpg"
+  [ "${debug:?}" = "debug" ] && add_list sp/"$ppa_name" "$ppa_sp/$ppa/ubuntu" "$ppa_sp/$ppa/ubuntu/key.gpg" "$VERSION_CODENAME" "main/debug"
+  add_list sp/"$ppa_name" "$ppa_sp/$ppa/ubuntu" "$ppa_sp/$ppa/ubuntu/key.gpg"
 }
 
 # Function to add a PPA.
@@ -182,7 +182,7 @@ add_ppa() {
   ppa=${1:-ondrej/php}
   if [[ "$ID" = "ubuntu" || "$ID_LIKE" =~ ubuntu ]] && [[ "$ppa" =~ "ondrej/" ]]; then
     if is_ubuntu_ppa_up "$ppa" ; then
-      [ "${runner:?}" = "self-hosted" ] && find "$list_dir" -type f -name 'sp*' -exec grep -qF "$sp" {} \; -delete
+      [ "${runner:?}" = "self-hosted" ] && find "$list_dir" -type f -name 'sp*' -exec grep -qF "${sp/https:\/\/}" {} \; -delete
       [ "${debug:?}" = "debug" ] && add_list "$ppa" "$lpc_ppa/$ppa/ubuntu" "$lpc_ppa/$ppa/ubuntu" "$VERSION_CODENAME" "main/debug"
       add_list "$ppa"
     else
@@ -225,6 +225,7 @@ lpc_ppa='https://ppa.launchpadcontent.net'
 key_dir='/usr/share/keyrings'
 dist_info_dir='/usr/share/distro-info'
 sury='https://packages.sury.org'
+ppa_sp='https://ppa.setup-php.com'
 sp='https://setup-php.com'
 sks=(
   'https://keyserver.ubuntu.com'
