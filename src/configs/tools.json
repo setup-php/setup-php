@@ -1,4 +1,9 @@
 {
+  "backward-compatibility-check": {
+    "type": "composer",
+    "repository": "roave/backward-compatibility-check",
+    "scope": "scoped"
+  },
   "box": {
     "type": "phar",
     "repository": "box-project/box",
@@ -45,6 +50,12 @@
     "version_prefix": "",
     "version_parameter": "-V"
   },
+  "easy-coding-standard": {
+    "type": "composer",
+    "alias": "ecs",
+    "repository": "symplify/easy-coding-standard",
+    "scope": "scoped"
+  },
   "infection": {
     "type": "phar",
     "repository": "infection/infection",
@@ -52,6 +63,11 @@
     "domain": "https://github.com",
     "version_prefix": "",
     "version_parameter": "-V"
+  },
+  "name-collision-detector": {
+    "type": "composer",
+    "repository": "shipmonk/name-collision-detector",
+    "scope": "scoped"
   },
   "phan": {
     "type": "phar",
@@ -233,6 +249,12 @@
     "domain": "https://github.com",
     "version_prefix": "v"
   },
+  "mago": {
+    "type": "custom-package",
+    "repository": "carthage-software/mago",
+    "domain": "https://github.com",
+    "version_prefix": ""
+  },
   "protoc": {
     "type": "custom-package",
     "repository": "protocolbuffers/protobuf",
@@ -331,11 +353,5 @@
     "extension": ".phar",
     "version_parameter": "--version",
     "version_prefix": "v"
-  },
-  "easy-coding-standard": {
-    "type": "composer",
-    "alias": "ecs",
-    "repository": "symplify/easy-coding-standard",
-    "scope": "scoped"
   }
 }
