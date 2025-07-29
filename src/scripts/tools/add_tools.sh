@@ -11,7 +11,7 @@ get_tool_version() {
   alp="[a-zA-Z0-9\.]"
   version_regex="[0-9]+((\.{1}$alp+)+)(\.{0})(-$alp+){0,1}"
   if [ "$tool" = "composer" ]; then
-    composer_alias_version="$(grep -Ea "const\sBRANCH_ALIAS_VERSION" "$tool_path_dir/composer" | grep -Eo "$version_regex")"
+    composer_alias_version="$(grep -Ea "const\sBRANCH_ALIAS_VERSION" "${tool_path_dir:?}/composer" | grep -Eo "$version_regex")"
     if [[ -n "$composer_alias_version" ]]; then
       composer_version="$composer_alias_version+$(grep -Ea "const\sVERSION" "$tool_path_dir/composer" | grep -Eo "$alp+" | tail -n 1)"
     else
@@ -46,6 +46,25 @@ configure_composer() {
   set_composer_auth
 }
 
+# Function to merge auth.json fragments.
+update_auth_json() {
+  local auth_file="$composer_home/auth.json"
+  local merged
+  [[ -f "$auth_file" ]] && merged=$(<"$auth_file") || merged='{}'
+  for frag in "$@"; do
+    local obj="{$frag}"
+    merged=$(jq -n --argjson b "$merged" --argjson n "$obj" '
+      if $n|has("http-basic") then
+        (($b["http-basic"]//{}) + $n["http-basic"]) as $hb
+        | ($b + $n) | .["http-basic"] = $hb
+      else
+        $b + $n
+      end
+    ')
+  done
+  printf '%s' "$merged" > "$composer_home/auth.json"
+}
+
 # Function to setup authentication in composer.
 set_composer_auth() {
   if [ -n "$COMPOSER_AUTH_JSON" ]; then
@@ -63,7 +82,7 @@ set_composer_auth() {
     composer_auth+=( '"github-oauth": {"github.com": "'"${GITHUB_TOKEN:-$COMPOSER_TOKEN}"'"}' )
   fi
   if ((${#composer_auth[@]})); then
-    add_env COMPOSER_AUTH "{$(IFS=$','; echo "${composer_auth[*]}")}"
+    update_auth_json "${composer_auth[@]}"
   fi
 }
 
