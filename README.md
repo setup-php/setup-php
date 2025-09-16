@@ -77,8 +77,9 @@ Both `GitHub-hosted` and `self-hosted` runners are supported by `setup-php` on t
 | Windows Server 2025 | x64     | `windows-2025`                     | `PHP 8.3`              |
 | Windows Server 2022 | x64     | `windows-latest` or `windows-2022` | `PHP 8.3`              |
 | Windows Server 2019 | x64     | `windows-2019`                     | `PHP 8.3`              |
-| macOS Sequoia 15.x  | arm64   | `macos-15`                         | -                      |
-| macOS Sonoma 14.x   | arm64   | `macos-latest` or `macos-14`       | -                      |
+| macOS Tahoe 26.x    | arm64   | `macos-26`                         | -                      |
+| macOS Sequoia 15.x  | arm64   | `macos-latest` or `macos-15`       | -                      |
+| macOS Sonoma 14.x   | arm64   | `macos-14`                         | -                      |
 | macOS Ventura 13.x  | x86_64  | `macos-13`                         | `PHP 8.3`              |
 
 ### Self-Hosted Runners
@@ -91,6 +92,7 @@ Both `GitHub-hosted` and `self-hosted` runners are supported by `setup-php` on t
 | Debian 11                        | `self-hosted` or `Linux`   |
 | Windows 7 and newer              | `self-hosted` or `Windows` |
 | Windows Server 2012 R2 and newer | `self-hosted` or `Windows` |
+| macOS Tahoe 26.x x86_64/arm64    | `self-hosted` or `macOS`   |
 | macOS Sequoia 15.x x86_64/arm64  | `self-hosted` or `macOS`   |
 | macOS Sonoma 14.x x86_64/arm64   | `self-hosted` or `macOS`   |
 | macOS Ventura 13.x x86_64/arm64  | `self-hosted` or `macOS`   |
@@ -742,7 +744,7 @@ act -P ubuntu-22.04=shivammathur/node:2204
 
 - To enable JIT, enable `opcache` in cli mode by setting `opcache.enable_cli=1`.
 - JIT conflicts with `Xdebug`, `PCOV`, and other extensions which override `zend_execute_ex` function, so set `coverage: none` and disable any such extension if added.
-- By default, `opcache.jit=1235` and `opcache.jit_buffer_size=256M` are set which can be changed using `ini-values` input.
+- By default, `opcache.jit=1235` and `opcache.jit_buffer_size=256M` (`opcache.jit_buffer_size=128M` on ARM-based environments) are set which can be changed using `ini-values` input.
 - For detailed information about JIT related directives refer to the [`official PHP documentation`](https://www.php.net/manual/en/opcache.configuration.php#ini.opcache.jit "opcache.jit documentation").
 
 For example to enable JIT in `tracing` mode with buffer size of `64 MB`.
