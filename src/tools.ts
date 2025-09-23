@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import * as cv from 'compare-versions';
 import * as fetch from './fetch';
 import * as packagist from './packagist';
 import * as utils from './utils';
@@ -20,6 +21,11 @@ interface IRef {
  * @param data
  */
 export async function getSemverVersion(data: RS): Promise<string> {
+  const fixSemver = (t: string): string => {
+    if (/^\d+\.\d+\.\d+(-|$)/.test(t)) return t;
+    const m = t.match(/^(\d+\.\d+\.\d+)([A-Za-z]+[0-9A-Za-z.]+)$/);
+    return m ? `${m[1]}-${m[2]}` : t;
+  };
   const search: string = data['version_prefix'] + data['version'];
   const url = `https://api.github.com/repos/${data['repository']}/git/matching-refs/tags%2F${search}.`;
   const github_token: string =
@@ -30,10 +36,24 @@ export async function getSemverVersion(data: RS): Promise<string> {
     data['error'] = response.error ?? `No version found with prefix ${search}.`;
     return data['version'];
   } else {
-    const refs = JSON.parse(response['data']).reverse();
-    const ref = refs.find((i: IRef) => /.*\d+.\d+.\d+$/.test(i['ref']));
-    const tag: string = (ref || refs[0])['ref'].split('/').pop();
-    return tag.replace(/^v(\d)/, '$1');
+    const refs: IRef[] = JSON.parse(response['data']);
+    const tags = refs
+      .map((i: IRef) => (i.ref?.split('/').pop() ?? '').replace(/^v(?=\d)/, ''))
+      .filter((t: string) => t.length > 0);
+    const fixedToOriginal = new Map<string, string>();
+    const fixed = tags.map(t => {
+      const f = fixSemver(t);
+      fixedToOriginal.set(f, t);
+      return f;
+    });
+    fixed.sort((a, b) => {
+      try {
+        return cv.compareVersions(b, a);
+      } catch {
+        return b.localeCompare(a, 'en', {numeric: true, sensitivity: 'base'});
+      }
+    });
+    return fixedToOriginal.get(fixed[0]) ?? fixed[0];
   }
 }
 
