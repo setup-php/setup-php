@@ -186,7 +186,7 @@ add_php() {
       brew unlink "$php_keg"
     fi
   else
-    brew install -f --overwrite "$php_formula"
+    brew install -f --overwrite "$php_formula" || brew upgrade -f --overwrite "$php_formula"
   fi
   sudo chown -R "$(id -un)":"$(id -gn)" "$brew_prefix"
   brew link --force --overwrite "$php_keg"
@@ -277,7 +277,7 @@ setup_php() {
 }
 
 # Variables
-version=${1:-'8.4'}
+version=${1:-'8.5'}
 ini=${2:-'production'}
 src=${0%/*}/..
 php_formula=shivammathur/php/php@"$version"
