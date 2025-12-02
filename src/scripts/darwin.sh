@@ -50,7 +50,7 @@ get_renamed_formula() {
   if [ -e "$formula_renames_json" ] && grep -q "$formula@$version\":" "$formula_renames_json"; then
     grep "$formula@$version\":" "$formula_renames_json" | cut -d ':' -f 2 | tr -d ' ",' | cut -d '@' -f 1
   else
-    echo $formula
+    echo "$formula"
   fi
 }
 
@@ -177,19 +177,20 @@ add_php() {
   php_formula="shivammathur/php/$php_keg"
   if [[ "$existing_version" = "false" || -n "$suffix" || "$action" = "upgrade" ]]; then
     update_dependencies
-    add_brew_tap
+    add_brew_tap "$php_tap"
   fi
   if [[ "$existing_version" != "false" && -z "$suffix" ]]; then
     if [ "$action" = "upgrade" ]; then
+      brew install --only-dependencies "$php_formula"
       brew upgrade -f --overwrite "$php_formula"
     else
       brew unlink "$php_keg"
     fi
   else
-    brew install -f --overwrite "$php_formula" || brew upgrade -f --overwrite "$php_formula"
+    brew install --only-dependencies "$php_formula"
+    brew install -f --overwrite "$php_formula" 2>/dev/null || brew upgrade -f --overwrite "$php_formula"
   fi
-  sudo chown -R "$(id -un)":"$(id -gn)" "$brew_prefix"
-  brew link --force --overwrite "$php_keg"
+  brew link --force --overwrite "$php_keg" || (sudo chown -R "$(id -un)":"$(id -gn)" "$brew_prefix" && brew link --force --overwrite "$php_keg")
 }
 
 # Function to get formula suffix
