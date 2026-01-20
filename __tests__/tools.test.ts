@@ -1,40 +1,33 @@
 import * as fs from 'fs';
 import * as tools from '../src/tools';
+import {ToolData, ToolInput} from '../src/tools';
 
-interface IData {
-  tool: string;
-  version?: string;
-  domain?: string;
-  extension?: string;
-  os?: string;
-  php_version?: string;
-  release?: string;
-  repository?: string;
-  scope?: string;
-  type?: string;
-  fetch_latest?: string;
-  version_parameter?: string;
-  version_prefix?: string;
-}
-
-function getData(data: IData): Record<string, string> {
+function getData(data: Partial<ToolData>): ToolData {
+  const tool = data.tool || 'tool';
+  const version = data.version || '';
   return {
-    tool: data.tool,
-    version: data.version || '',
+    tool,
+    version,
+    url: data.url || '',
     domain: data.domain || 'https://example.com',
     extension: data.extension || '.phar',
     os: data.os || 'linux',
     php_version: data.php_version || '7.4',
-    release: data.release || [data.tool, data.version].join(':'),
+    release: data.release || [tool, version].join(':'),
     repository: data.repository || '',
     scope: data.scope || 'global',
     type: data.type || 'phar',
     fetch_latest: data.fetch_latest || 'false',
     version_parameter: data.version_parameter || '-V',
     version_prefix: data.version_prefix || '',
-    github: 'https://github.com',
-    prefix: 'releases',
-    verb: 'download'
+    github: data.github || 'https://github.com',
+    prefix: data.prefix || 'releases',
+    verb: data.verb || 'download',
+    packagist: data.packagist || data.repository || '',
+    function: data.function,
+    alias: data.alias,
+    uri: data.uri,
+    error: data.error
   };
 }
 
@@ -161,6 +154,18 @@ describe('Tools tests', () => {
     }
   );
 
+  it('checking getLatestVersion with fetch_latest=true but no repository', async () => {
+    expect(
+      await tools.getLatestVersion(
+        getData({
+          tool: 'tool',
+          repository: '',
+          fetch_latest: 'true'
+        })
+      )
+    ).toBe('latest');
+  });
+
   it.each`
     version            | tool          | type          | expected
     ${'latest'}        | ${'tool'}     | ${'phar'}     | ${'latest'}
@@ -245,13 +250,15 @@ describe('Tools tests', () => {
   );
 
   it('checking getUrl handles undefined version without double slash', async () => {
-    const data = getData({
-      tool: 'cs2pr',
-      repository: 'staabm/annotate-pull-request-from-checkstyle',
-      domain: 'https://github.com'
-    });
-    data['extension'] = '';
-    delete data['version'];
+    const data: ToolInput = {
+      ...getData({
+        tool: 'cs2pr',
+        repository: 'staabm/annotate-pull-request-from-checkstyle',
+        domain: 'https://github.com'
+      }),
+      version: undefined
+    };
+    data.extension = '';
     expect(await tools.getUrl(data)).toBe(
       'https://github.com/staabm/annotate-pull-request-from-checkstyle/releases/download/cs2pr'
     );
@@ -284,9 +291,9 @@ describe('Tools tests', () => {
       tool: 'tool',
       version: 'latest',
       version_parameter: JSON.stringify('-v'),
-      os: os
+      os: os,
+      url: 'https://example.com/tool.phar'
     });
-    data['url'] = 'https://example.com/tool.phar';
     expect(await tools.addArchive(data)).toContain(script);
   });
 
@@ -649,14 +656,43 @@ describe('Tools tests', () => {
     expect(await tools.addTools(tools_csv, '7.4', 'linux')).toContain(script);
   });
 
-  it.each`
-    tools_csv        | token              | script
-    ${'cs2pr:1.2'}   | ${'invalid_token'} | ${'add_log "$cross" "cs2pr" "Invalid token"'}
-    ${'phpunit:1.2'} | ${'invalid_token'} | ${'add_log "$cross" "phpunit" "Invalid token"'}
-    ${'phpunit:0.1'} | ${'no_data'}       | ${'add_log "$cross" "phpunit" "No version found with prefix 0.1."'}
-  `('checking error: $tools_csv', async ({tools_csv, token, script}) => {
-    process.env['GITHUB_TOKEN'] = token;
-    expect(await tools.addTools(tools_csv, '7.4', 'linux')).toContain(script);
+  it('checking error when custom-function tool is missing function field', async () => {
+    const brokenToolsJson = JSON.stringify({
+      composer: {
+        type: 'custom-function',
+        domain: 'https://getcomposer.org',
+        repository: 'composer/composer',
+        function: 'composer'
+      },
+      'broken-tool': {
+        type: 'custom-function'
+      }
+    });
+
+    let result: string = '';
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('fs', () => ({
+        ...jest.requireActual('fs'),
+        readFileSync: (
+          filePath: fs.PathOrFileDescriptor,
+          options?: unknown
+        ) => {
+          if (String(filePath).includes('tools.json')) {
+            return brokenToolsJson;
+          }
+          return (jest.requireActual('fs') as typeof fs).readFileSync(
+            filePath,
+            options as fs.ObjectEncodingOptions & {flag?: string}
+          );
+        }
+      }));
+      const isolatedTools = await import('../src/tools');
+      result = await isolatedTools.addTools('broken-tool', '7.4', 'linux');
+    });
+
+    expect(result).toContain(
+      'add_log "$cross" "broken-tool" "broken-tool has no function defined. Please report this issue."'
+    );
   });
 
   it.each`

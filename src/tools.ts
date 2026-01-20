@@ -5,14 +5,94 @@ import * as fetch from './fetch';
 import * as packagist from './packagist';
 import * as utils from './utils';
 
-type RS = Record<string, string>;
-type RSRS = Record<string, RS>;
+/**
+ * Valid function names for custom tool handlers
+ */
+type ToolFunction =
+  | 'castor'
+  | 'composer'
+  | 'deployer'
+  | 'dev_tools'
+  | 'phive'
+  | 'blackfire_player'
+  | 'pecl'
+  | 'phing'
+  | 'phpunit'
+  | 'phpcpd'
+  | 'wp_cli';
 
-interface IRef {
+/**
+ * Tool data interface containing all properties for tool installation
+ */
+export interface ToolData {
+  tool: string;
+  version: string;
+  os: string;
+  php_version: string;
+  github: string;
+  domain: string;
+  extension: string;
+  repository: string;
+  prefix: string;
+  verb: string;
+  fetch_latest: 'true' | 'false';
+  scope: string;
+  version_parameter: string;
+  version_prefix: string;
+  release: string;
+  packagist: string;
+  type?: string;
+  function?: ToolFunction;
+  alias?: string;
+  url: string;
+  uri?: string;
+  error?: string;
+}
+
+/**
+ * Input type for functions that may receive partial/unresolved tool data
+ * Used by getUrl, getLatestVersion etc. before version is fully resolved
+ */
+export type ToolInput = Omit<ToolData, 'version' | 'url'> & {version?: string};
+
+/**
+ * Partial tool data from tools.json configuration
+ */
+interface ToolConfig {
+  tool?: string;
+  repository?: string;
+  type?: string;
+  function?: ToolFunction;
+  alias?: string;
+  domain?: string;
+  extension?: string;
+  fetch_latest?: 'true' | 'false';
+  scope?: string;
+  version_parameter?: string;
+  version_prefix?: string;
+  packagist?: string;
+}
+
+/**
+ * GitHub reference object from API response
+ */
+interface GitHubRef {
   ref: string;
   node_id: string;
   url: string;
-  object: RS;
+  object: {
+    sha: string;
+    type: string;
+    url: string;
+  };
+}
+
+/**
+ * Deployer manifest entry
+ */
+interface DeployerManifestEntry {
+  version: string;
+  url: string;
 }
 
 /**
@@ -20,7 +100,7 @@ interface IRef {
  *
  * @param data
  */
-export async function getSemverVersion(data: RS): Promise<string> {
+export async function getSemverVersion(data: ToolData): Promise<string> {
   const fixSemver = (t: string): string => {
     if (/^\d+\.\d+\.\d+(-|$)/.test(t)) return t;
     const m = t.match(/^(\d+\.\d+\.\d+)([A-Za-z]+[0-9A-Za-z.]+)$/);
@@ -31,14 +111,16 @@ export async function getSemverVersion(data: RS): Promise<string> {
   const github_token: string =
     (await utils.readEnv('GITHUB_TOKEN')) ||
     (await utils.readEnv('COMPOSER_TOKEN'));
-  const response: RS = await fetch.fetch(url, github_token);
+  const response = await fetch.fetch(url, github_token);
   if (response.error || response.data === '[]') {
-    data['error'] = response.error ?? `No version found with prefix ${search}.`;
-    return data['version'];
+    data.error = response.error ?? `No version found with prefix ${search}.`;
+    return data.version;
   } else {
-    const refs: IRef[] = JSON.parse(response['data']);
+    const refs: GitHubRef[] = JSON.parse(response.data);
     const tags = refs
-      .map((i: IRef) => (i.ref?.split('/').pop() ?? '').replace(/^v(?=\d)/, ''))
+      .map((i: GitHubRef) =>
+        (i.ref?.split('/').pop() ?? '').replace(/^v(?=\d)/, '')
+      )
       .filter((t: string) => t.length > 0);
     const fixedToOriginal = new Map<string, string>();
     const fixed = tags.map(t => {
@@ -62,16 +144,19 @@ export async function getSemverVersion(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function getLatestVersion(data: RS): Promise<string> {
-  if (!data['version'] && data['fetch_latest'] === 'false') {
+export async function getLatestVersion(data: ToolInput): Promise<string> {
+  if (!data.version && data.fetch_latest === 'false') {
     return 'latest';
   }
-  const resp: Record<string, string> = await fetch.fetch(
-    `${data['github']}/${data['repository']}/releases.atom`
+  if (data.fetch_latest === 'true' && !data.repository) {
+    return 'latest';
+  }
+  const resp = await fetch.fetch(
+    `${data.github}/${data.repository}/releases.atom`
   );
-  if (resp['data']) {
+  if (resp.data) {
     const releases: string[] = [
-      ...resp['data'].matchAll(/releases\/tag\/([a-zA-Z]*)?(\d+.\d+.\d+)"/g)
+      ...resp.data.matchAll(/releases\/tag\/([a-zA-Z]*)?(\d+\.\d+\.\d+)"/g)
     ].map(match => match[2]);
 
     const sorted = releases.toSorted((a: string, b: string) =>
@@ -88,26 +173,29 @@ export async function getLatestVersion(data: RS): Promise<string> {
  * @param version
  * @param data
  */
-export async function getVersion(version: string, data: RS): Promise<string> {
+export async function getVersion(
+  version: string,
+  data: ToolData
+): Promise<string> {
   // semver_regex - https://semver.org/
   const semver_regex =
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
-  const composer_regex = /^composer:(stable|preview|snapshot|[1|2])$/;
+  const composer_regex = /^composer:(stable|preview|snapshot|[12])$/;
   const constraint_regex = /[><=^~]+.*/;
   const major_minor_regex = /^\d+(\.\d+)?$/;
-  data['version'] = version.replace(/v?(\d)/, '$1').replace(/\.x/, '');
+  data.version = version.replace(/v?(\d)/, '$1').replace(/\.x/, '');
   switch (true) {
-    case composer_regex.test(data['release']):
-    case semver_regex.test(data['version']):
-    case constraint_regex.test(data['version']) && data['type'] === 'composer':
-      return data['version'];
-    case major_minor_regex.test(data['version']) && data['type'] === 'composer':
-      data['release'] = `${data['tool']}:${data['version']}.*`;
-      return `${data['version']}.*`;
-    case data['repository'] && major_minor_regex.test(data['version']):
+    case composer_regex.test(data.release):
+    case semver_regex.test(data.version):
+    case constraint_regex.test(data.version) && data.type === 'composer':
+      return data.version;
+    case major_minor_regex.test(data.version) && data.type === 'composer':
+      data.release = `${data.tool}:${data.version}.*`;
+      return `${data.version}.*`;
+    case !!data.repository && major_minor_regex.test(data.version):
       return await getSemverVersion(data);
     default:
-      return data['version'].replace(/[><=^~]*/, '');
+      return data.version.replace(/[><=^~]*/, '');
   }
 }
 
@@ -117,11 +205,14 @@ export async function getVersion(version: string, data: RS): Promise<string> {
  * @param release
  * @param data
  */
-export async function getRelease(release: string, data: RS): Promise<string> {
+export async function getRelease(
+  release: string,
+  data: ToolData
+): Promise<string> {
   release = release.includes('/') ? release.split('/')[1] : release;
   return release.includes(':')
-    ? [data['tool'], release.split(':')[1]].join(':')
-    : data['tool'];
+    ? [data.tool, release.split(':')[1]].join(':')
+    : data.tool;
 }
 
 /**
@@ -152,26 +243,26 @@ export async function filterList(tools_list: string[]): Promise<string[]> {
  *
  * @param data
  */
-export async function getUrl(data: RS): Promise<string> {
-  if ((data['version'] ?? 'latest') === 'latest') {
+export async function getUrl(data: ToolInput): Promise<string> {
+  if ((data.version ?? 'latest') === 'latest') {
     return [
-      data['domain'],
-      data['repository'],
-      data['prefix'],
-      data['version'],
-      data['verb'],
-      data['tool'] + data['extension']
+      data.domain,
+      data.repository,
+      data.prefix,
+      data.version,
+      data.verb,
+      data.tool + data.extension
     ]
       .filter(Boolean)
       .join('/');
   } else {
     return [
-      data['domain'],
-      data['repository'],
-      data['prefix'],
-      data['verb'],
-      data['version_prefix'] + data['version'],
-      data['tool'] + data['extension']
+      data.domain,
+      data.repository,
+      data.prefix,
+      data.verb,
+      data.version_prefix + data.version,
+      data.tool + data.extension
     ]
       .filter(Boolean)
       .join('/');
@@ -183,17 +274,17 @@ export async function getUrl(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function getPharUrl(data: RS): Promise<string> {
-  if (data['version'] === 'latest') {
-    return data['domain'] + '/' + data['tool'] + '.phar';
+export async function getPharUrl(data: ToolData): Promise<string> {
+  if (data.version === 'latest') {
+    return data.domain + '/' + data.tool + '.phar';
   } else {
     return (
-      data['domain'] +
+      data.domain +
       '/' +
-      data['tool'] +
+      data.tool +
       '-' +
-      data['version_prefix'] +
-      data['version'] +
+      data.version_prefix +
+      data.version +
       '.phar'
     );
   }
@@ -204,10 +295,10 @@ export async function getPharUrl(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addArchive(data: RS): Promise<string> {
+export async function addArchive(data: ToolData): Promise<string> {
   return (
-    (await utils.getCommand(data['os'], 'tool')) +
-    (await utils.joins(data['url'], data['tool'], data['version_parameter']))
+    (await utils.getCommand(data.os, 'tool')) +
+    (await utils.joins(data.url, data.tool, data.version_parameter))
   );
 }
 
@@ -216,14 +307,14 @@ export async function addArchive(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addPackage(data: RS): Promise<string> {
-  const command = await utils.getCommand(data['os'], 'composer_tool');
-  const parts: string[] = data['repository'].split('/');
+export async function addPackage(data: ToolData): Promise<string> {
+  const command = await utils.getCommand(data.os, 'composer_tool');
+  const parts: string[] = data.repository.split('/');
   const args: string = await utils.joins(
     parts[1],
-    data['release'],
+    data.release,
     parts[0] + '/',
-    data['scope']
+    data.scope
   );
   return command + args;
 }
@@ -233,24 +324,24 @@ export async function addPackage(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addBlackfirePlayer(data: RS): Promise<string> {
-  switch (data['os']) {
+export async function addBlackfirePlayer(data: ToolData): Promise<string> {
+  switch (data.os) {
     case 'win32':
       return await utils.addLog(
         '$cross',
-        data['tool'],
-        data['tool'] + ' is not a windows tool',
+        data.tool,
+        data.tool + ' is not a windows tool',
         'win32'
       );
     default:
-      if (data['version'] == 'latest') {
-        if (/5\.[5-6]|7\.0/.test(data['php_version'])) {
-          data['version'] = '1.9.3';
-        } else if (/7\.[1-4]|8\.0/.test(data['php_version'])) {
-          data['version'] = '1.22.0';
+      if (data.version == 'latest') {
+        if (/5\.[5-6]|7\.0/.test(data.php_version)) {
+          data.version = '1.9.3';
+        } else if (/7\.[1-4]|8\.0/.test(data.php_version)) {
+          data.version = '1.22.0';
         }
       }
-      data['url'] = await getPharUrl(data);
+      data.url = await getPharUrl(data);
       return addArchive(data);
   }
 }
@@ -260,12 +351,12 @@ export async function addBlackfirePlayer(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addCastor(data: RS): Promise<string> {
-  data['tool'] = 'castor.' + data['os'].replace('win32', 'windows') + '-amd64';
-  data['url'] = await getUrl(data);
-  data['tool'] = 'castor';
-  data['version_parameter'] = fs.existsSync('castor.php')
-    ? data['version_parameter']
+export async function addCastor(data: ToolData): Promise<string> {
+  data.tool = 'castor.' + data.os.replace('win32', 'windows') + '-amd64';
+  data.url = await getUrl(data);
+  data.tool = 'castor';
+  data.version_parameter = fs.existsSync('castor.php')
+    ? data.version_parameter
     : '';
   return await addArchive(data);
 }
@@ -275,18 +366,18 @@ export async function addCastor(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addComposer(data: RS): Promise<string> {
-  const channel = data['version'].replace('latest', 'stable');
-  const github = data['github'];
-  const getcomposer = data['domain'];
+export async function addComposer(data: ToolData): Promise<string> {
+  const channel = data.version.replace('latest', 'stable');
+  const github = data.github;
+  const getcomposer = data.domain;
   const cds = 'https://dl.cloudsmith.io';
   const spc = 'https://artifacts.setup-php.com';
-  const filename = `composer-${data['php_version']}-${channel}.phar`;
+  const filename = `composer-${data.php_version}-${channel}.phar`;
   const releases_url = `${github}/shivammathur/composer-cache/releases/latest/download/${filename}`;
   const cds_url = `${cds}/public/shivammathur/composer-cache/raw/files/${filename}`;
   const spc_url = `${spc}/composer/${filename}`;
   const lts_url = `${getcomposer}/download/latest-2.2.x/composer.phar`;
-  const is_lts = /^5\.[3-6]$|^7\.[0-1]$/.test(data['php_version']);
+  const is_lts = /^5\.[3-6]$|^7\.[0-1]$/.test(data.php_version);
   const channel_source_url = `${getcomposer}/composer-${channel}.phar`;
   const version_source_url = `${getcomposer}/download/${channel}/composer.phar`;
   let cache_url = `${releases_url},${spc_url},${cds_url}`;
@@ -301,16 +392,16 @@ export async function addComposer(data: RS): Promise<string> {
     case /^1$/.test(channel):
       source_url = channel_source_url;
       break;
-    case /^\d+\.\d+\.\d+[\w-]*$/.test(data['version']):
-      cache_url = `${github}/${data['repository']}/releases/download/${data['version']}/composer.phar`;
+    case /^\d+\.\d+\.\d+[\w-]*$/.test(data.version):
+      cache_url = `${github}/${data.repository}/releases/download/${data.version}/composer.phar`;
       source_url = version_source_url;
       break;
     default:
       source_url = is_lts ? lts_url : channel_source_url;
   }
   const use_cache: boolean = (await utils.readEnv('NO_TOOLS_CACHE')) !== 'true';
-  data['url'] = use_cache ? `${cache_url},${source_url}` : source_url;
-  data['version_parameter'] = data['version'];
+  data.url = use_cache ? `${cache_url},${source_url}` : source_url;
+  data.version_parameter = data.version;
   return await addArchive(data);
 }
 
@@ -319,27 +410,27 @@ export async function addComposer(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addDeployer(data: RS): Promise<string> {
-  if (data['version'] === 'latest') {
-    data['url'] = data['domain'] + '/deployer.phar';
+export async function addDeployer(data: ToolData): Promise<string> {
+  if (data.version === 'latest') {
+    data.url = data.domain + '/deployer.phar';
   } else {
-    const manifest: RS = await fetch.fetch(
-      'https://deployer.org/manifest.json'
+    const manifest = await fetch.fetch('https://deployer.org/manifest.json');
+    const version_data: Record<string, DeployerManifestEntry> = JSON.parse(
+      manifest.data
     );
-    const version_data: RSRS = JSON.parse(manifest.data);
     const version_key: string | undefined = Object.keys(version_data).find(
       (key: string) => {
-        return version_data[key]['version'] === data['version'];
+        return version_data[key].version === data.version;
       }
     );
     if (version_key) {
-      data['url'] = version_data[version_key]['url'];
+      data.url = version_data[version_key].url;
     } else {
       return await utils.addLog(
         '$cross',
         'deployer',
         'Version missing in deployer manifest',
-        data['os']
+        data.os
       );
     }
   }
@@ -351,22 +442,22 @@ export async function addDeployer(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addDevTools(data: RS): Promise<string> {
-  switch (data['os']) {
+export async function addDevTools(data: ToolData): Promise<string> {
+  switch (data.os) {
     case 'linux':
     case 'darwin':
-      return 'add_devtools ' + data['tool'];
+      return 'add_devtools ' + data.tool;
     case 'win32':
       return await utils.addLog(
         '$tick',
-        data['tool'],
-        data['tool'] + ' is not a windows tool',
+        data.tool,
+        data.tool + ' is not a windows tool',
         'win32'
       );
     default:
       return await utils.log(
-        'Platform ' + data['os'] + ' is not supported',
-        data['os'],
+        'Platform ' + data.os + ' is not supported',
+        data.os,
         'error'
       );
   }
@@ -377,8 +468,8 @@ export async function addDevTools(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addPECL(data: RS): Promise<string> {
-  return await utils.getCommand(data['os'], 'pecl');
+export async function addPECL(data: ToolData): Promise<string> {
+  return await utils.getCommand(data.os, 'pecl');
 }
 
 /**
@@ -386,14 +477,13 @@ export async function addPECL(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addPhing(data: RS): Promise<string> {
-  data['url'] =
-    data['domain'] + '/get/phing-' + data['version'] + data['extension'];
-  if (data['version'] != 'latest') {
-    [data['prefix'], data['verb']] = ['releases', 'download'];
-    data['domain'] = data['github'];
-    data['extension'] = '-' + data['version'] + data['extension'];
-    data['url'] += ',' + (await getUrl(data));
+export async function addPhing(data: ToolData): Promise<string> {
+  data.url = data.domain + '/get/phing-' + data.version + data.extension;
+  if (data.version != 'latest') {
+    [data.prefix, data.verb] = ['releases', 'download'];
+    data.domain = data.github;
+    data.extension = '-' + data.version + data.extension;
+    data.url += ',' + (await getUrl(data));
   }
   return await addArchive(data);
 }
@@ -403,33 +493,33 @@ export async function addPhing(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addPhive(data: RS): Promise<string> {
+export async function addPhive(data: ToolData): Promise<string> {
   switch (true) {
-    case /5\.[3-5]/.test(data['php_version']):
+    case /5\.[3-5]/.test(data.php_version):
       return await utils.addLog(
         '$cross',
         'phive',
-        'Phive is not supported on PHP ' + data['php_version'],
-        data['os']
+        'Phive is not supported on PHP ' + data.php_version,
+        data.os
       );
-    case /5\.6|7\.0/.test(data['php_version']):
-      data['version'] = '0.12.1';
+    case /5\.6|7\.0/.test(data.php_version):
+      data.version = '0.12.1';
       break;
-    case /7\.1/.test(data['php_version']):
-      data['version'] = '0.13.5';
+    case /7\.1/.test(data.php_version):
+      data.version = '0.13.5';
       break;
-    case /7\.2/.test(data['php_version']):
-      data['version'] = '0.14.5';
+    case /7\.2/.test(data.php_version):
+      data.version = '0.14.5';
       break;
-    case /7\.3|7\.4/.test(data['php_version']):
-      data['version'] = '0.15.3';
+    case /7\.3|7\.4/.test(data.php_version):
+      data.version = '0.15.3';
       break;
-    case /^latest$/.test(data['version']):
-      data['version'] = await getLatestVersion(data);
+    case /^latest$/.test(data.version):
+      data.version = await getLatestVersion(data);
       break;
   }
-  data['extension'] = '-' + data['version'] + data['extension'];
-  data['url'] = await getUrl(data);
+  data.extension = '-' + data.version + data.extension;
+  data.url = await getUrl(data);
   return await addArchive(data);
 }
 
@@ -438,16 +528,15 @@ export async function addPhive(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addPHPUnitTools(data: RS): Promise<string> {
+export async function addPHPUnitTools(data: ToolData): Promise<string> {
   /* istanbul ignore next */
-  if (data['version'] === 'latest') {
-    data['version'] =
-      (await packagist.search(data['packagist'], data['php_version'])) ??
-      'latest';
+  if (data.version === 'latest') {
+    data.version =
+      (await packagist.search(data.packagist, data.php_version)) ?? 'latest';
   }
-  data['url'] = await getPharUrl(data);
-  if (data['url'].match(/-\d+/)) {
-    data['url'] += ',' + data['url'].replace(/-(\d+)\.\d+\.\d+/, '-$1');
+  data.url = await getPharUrl(data);
+  if (data.url.match(/-\d+/)) {
+    data.url += ',' + data.url.replace(/-(\d+)\.\d+\.\d+/, '-$1');
   }
   return await addArchive(data);
 }
@@ -457,13 +546,13 @@ export async function addPHPUnitTools(data: RS): Promise<string> {
  *
  * @param data
  */
-export async function addWPCLI(data: RS): Promise<string> {
-  if (data['version'] === 'latest') {
-    data['uri'] = 'wp-cli/builds/blob/gh-pages/phar/wp-cli.phar?raw=true';
-    data['url'] = [data['domain'], data['uri']].join('/');
+export async function addWPCLI(data: ToolData): Promise<string> {
+  if (data.version === 'latest') {
+    data.uri = 'wp-cli/builds/blob/gh-pages/phar/wp-cli.phar?raw=true';
+    data.url = [data.domain, data.uri].join('/');
   } else {
-    data['extension'] = '-' + data['version'] + data['extension'];
-    data['url'] = await getUrl(data);
+    data.extension = '-' + data.version + data.extension;
+    data.url = await getUrl(data);
   }
   return await addArchive(data);
 }
@@ -479,56 +568,74 @@ export async function getData(
   release: string,
   php_version: string,
   os: string
-): Promise<RS> {
+): Promise<ToolData> {
   const json_file_path = path.join(__dirname, '../src/configs/tools.json');
   const json_file: string = fs.readFileSync(json_file_path, 'utf8');
-  const json_objects: RSRS = JSON.parse(json_file);
+  const json_objects: Record<string, ToolConfig> = JSON.parse(json_file);
   release = release.replace(/\s+/g, '');
   const parts: string[] = release.split(':');
   const tool = parts[0];
   const version = parts[1];
-  let data: RS;
+  let config: ToolConfig & {tool: string};
   if (Object.hasOwn(json_objects, tool)) {
-    data = json_objects[tool];
-    data['tool'] = tool;
+    config = {...json_objects[tool], tool};
   } else {
     const key: string | undefined = Object.keys(json_objects).find(
       (key: string) => {
-        return json_objects[key]['alias'] == tool;
+        return json_objects[key].alias == tool;
       }
     );
     if (key) {
-      data = json_objects[key];
-      data['tool'] = key;
-    } else {
-      data = {
+      config = {...json_objects[key], tool: key};
+    } else if (tool.includes('/')) {
+      config = {
         tool: tool.split('/')[1],
         repository: tool,
         type: 'composer'
       };
-      data = !tool.includes('/') ? {tool: tool} : data;
+    } else {
+      config = {tool};
     }
   }
-  data['github'] = 'https://github.com';
-  data['domain'] ??= data['github'];
-  data['extension'] ??= '.phar';
-  data['os'] = os;
-  data['php_version'] = php_version;
-  data['packagist'] ??= data['repository'];
-  data['prefix'] = data['github'] === data['domain'] ? 'releases' : '';
-  data['verb'] = data['github'] === data['domain'] ? 'download' : '';
-  data['fetch_latest'] ??= 'false';
-  data['scope'] ??= 'global';
-  data['version_parameter'] = JSON.stringify(data['version_parameter']) || '';
-  data['version_prefix'] ??= '';
-  data['release'] = await getRelease(release, data);
-  data['version'] = version
+  const github = 'https://github.com';
+  const domain = config.domain ?? github;
+  const data: ToolData = {
+    tool: config.tool,
+    version: '',
+    url: '',
+    os,
+    php_version,
+    github,
+    domain,
+    extension: config.extension ?? '.phar',
+    repository: config.repository ?? '',
+    prefix: domain === github ? 'releases' : '',
+    verb: domain === github ? 'download' : '',
+    fetch_latest: config.fetch_latest ?? 'false',
+    scope: config.scope ?? 'global',
+    version_parameter:
+      config.version_parameter != null
+        ? JSON.stringify(config.version_parameter)
+        : '',
+    version_prefix: config.version_prefix ?? '',
+    release: '',
+    packagist: config.packagist ?? config.repository ?? '',
+    type: config.type,
+    function: config.function,
+    alias: config.alias
+  };
+  data.release = await getRelease(release, data);
+  data.version = version
     ? await getVersion(version, data)
     : await getLatestVersion(data);
+  data.url = await getUrl(data);
   return data;
 }
 
-export const functionRecord: Record<string, (data: RS) => Promise<string>> = {
+export const functionRecord: Record<
+  ToolFunction,
+  (data: ToolData) => Promise<string>
+> = {
   castor: addCastor,
   composer: addComposer,
   deployer: addDeployer,
@@ -562,43 +669,46 @@ export async function addTools(
   }
   const tools_list = await filterList(await utils.CSVArray(tools_csv));
   await utils.asyncForEach(tools_list, async function (release: string) {
-    const data: RS = await getData(release, php_version, os);
+    const data: ToolData = await getData(release, php_version, os);
     script += '\n';
     switch (true) {
-      case data['error'] !== undefined:
-        script += await utils.addLog(
-          '$cross',
-          data['tool'],
-          data['error'],
-          data['os']
-        );
+      case data.error !== undefined:
+        script += await utils.addLog('$cross', data.tool, data.error, data.os);
         break;
-      case 'phar' === data['type']:
-        data['url'] = await getUrl(data);
+      case 'phar' === data.type:
         script += await addArchive(data);
         break;
-      case 'composer' === data['type']:
+      case 'composer' === data.type:
         script += await addPackage(data);
         break;
-      case 'custom-package' === data['type']:
+      case 'custom-package' === data.type:
         script += await utils.customPackage(
-          data['tool'].split('-')[0],
+          data.tool.split('-')[0],
           'tools',
-          data['version'],
-          data['os']
+          data.version,
+          data.os
         );
         break;
-      case 'custom-function' === data['type']:
-        script += await functionRecord[data['function']](data);
+      case 'custom-function' === data.type:
+        if (!data.function) {
+          script += await utils.addLog(
+            '$cross',
+            data.tool,
+            data.tool + ' has no function defined. Please report this issue.',
+            data.os
+          );
+        } else {
+          script += await functionRecord[data.function](data);
+        }
         break;
-      case /^none$/.test(data['tool']):
+      case /^none$/.test(data.tool):
         break;
       default:
         script += await utils.addLog(
           '$cross',
-          data['tool'],
-          'Tool ' + data['tool'] + ' is not supported',
-          data['os']
+          data.tool,
+          'Tool ' + data.tool + ' is not supported',
+          data.os
         );
         break;
     }
