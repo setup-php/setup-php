@@ -1,9 +1,7 @@
 import {fixupConfigRules, fixupPluginRules} from '@eslint/compat';
-// eslint-disable-next-line import/no-unresolved
 import typescriptEslint from '@typescript-eslint/eslint-plugin';
 import jest from 'eslint-plugin-jest';
 import globals from 'globals';
-// eslint-disable-next-line import/no-unresolved
 import tsParser from '@typescript-eslint/parser';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -46,6 +44,21 @@ export default [
       parser: tsParser,
       ecmaVersion: 2021,
       sourceType: 'module'
+    },
+
+    settings: {
+      'import/resolver': {
+        typescript: {
+          alwaysTryTypes: true,
+          project: './tsconfig.json'
+        },
+        node: {
+          extensions: ['.js', '.ts']
+        }
+      },
+      'import/parsers': {
+        '@typescript-eslint/parser': ['.ts']
+      }
     }
   }
 ];
