@@ -1,25 +1,10 @@
 import * as fs from 'fs';
 import * as tools from '../src/tools';
+import {ToolData} from '../src/tools';
 
-interface IData {
-  tool: string;
-  version?: string;
-  domain?: string;
-  extension?: string;
-  os?: string;
-  php_version?: string;
-  release?: string;
-  repository?: string;
-  scope?: string;
-  type?: string;
-  fetch_latest?: string;
-  version_parameter?: string;
-  version_prefix?: string;
-}
-
-function getData(data: IData): Record<string, string> {
+function getData(data: Partial<ToolData>): ToolData {
   return {
-    tool: data.tool,
+    tool: data.tool || 'tool',
     version: data.version || '',
     domain: data.domain || 'https://example.com',
     extension: data.extension || '.phar',
@@ -28,13 +13,19 @@ function getData(data: IData): Record<string, string> {
     release: data.release || [data.tool, data.version].join(':'),
     repository: data.repository || '',
     scope: data.scope || 'global',
-    type: data.type || 'phar',
+    type: data.type,
     fetch_latest: data.fetch_latest || 'false',
     version_parameter: data.version_parameter || '-V',
     version_prefix: data.version_prefix || '',
-    github: 'https://github.com',
-    prefix: 'releases',
-    verb: 'download'
+    github: data.github || 'https://github.com',
+    prefix: data.prefix || 'releases',
+    verb: data.verb || 'download',
+    packagist: data.packagist || data.repository || '',
+    function: data.function,
+    alias: data.alias,
+    url: data.url,
+    uri: data.uri,
+    error: data.error
   };
 }
 
@@ -250,8 +241,9 @@ describe('Tools tests', () => {
       repository: 'staabm/annotate-pull-request-from-checkstyle',
       domain: 'https://github.com'
     });
-    data['extension'] = '';
-    delete data['version'];
+    data.extension = '';
+    // Use type assertion to test undefined version edge case
+    (data as Partial<ToolData>).version = undefined as unknown as string;
     expect(await tools.getUrl(data)).toBe(
       'https://github.com/staabm/annotate-pull-request-from-checkstyle/releases/download/cs2pr'
     );
