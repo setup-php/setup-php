@@ -35,7 +35,6 @@
   "license": "MIT",
   "dependencies": {
     "@actions/exec": "^1.1.1",
-    "@actions/io": "^2.0.0",
     "compare-versions": "^6.1.1"
   },
   "devDependencies": {
