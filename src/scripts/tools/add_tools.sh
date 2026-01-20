@@ -123,19 +123,15 @@ add_tools_helper() {
     extensions+=(iconv mbstring phar sodium)
   elif [ "$tool" = "codeception" ]; then
     extensions+=(json mbstring)
-    sudo ln -s "$scoped_dir"/vendor/bin/codecept "$scoped_dir"/vendor/bin/codeception
+    sudo ln -s "$scoped_dir"/vendor/bin/codecept "$scoped_dir"/vendor/bin/codeception 2>/dev/null || true
   elif [ "$tool" = "composer" ]; then
     configure_composer "$tool_path"
   elif [ "$tool" = "cs2pr" ]; then
     sudo sed -i 's/\r$//; s/exit(9)/exit(0)/' "$tool_path" 2>/dev/null ||
     sudo sed -i '' 's/\r$//; s/exit(9)/exit(0)/' "$tool_path"
   elif [ "$tool" = "deployer" ]; then
-    if [ -e "$composer_bin"/deployer.phar ]; then
-      sudo ln -s "$composer_bin"/deployer.phar "$composer_bin"/dep
-    fi
-    if [ -e "$composer_bin"/dep ]; then
-      sudo ln -s "$composer_bin"/dep "$composer_bin"/deployer
-    fi
+    sudo ln -s "$tool_path" "$tool_path_dir"/deployer 2>/dev/null || true
+    sudo ln -s "$tool_path" "$tool_path_dir"/dep 2>/dev/null || true
   elif [ "$tool" = "phan" ]; then
     extensions+=(fileinfo ast)
   elif [ "$tool" = "phinx" ]; then
@@ -151,7 +147,7 @@ add_tools_helper() {
   elif [ "$tool" = "phpDocumentor" ]; then
     extensions+=(ctype hash json fileinfo iconv mbstring simplexml xml)
     sudo ln -s "$tool_path" "$tool_path_dir"/phpdocumentor 2>/dev/null || true
-    sudo ln -s "$tool_path" "$tool_path_dir"/phpdoc
+    sudo ln -s "$tool_path" "$tool_path_dir"/phpdoc 2>/dev/null || true
   elif [ "$tool" = "phpunit" ]; then
     extensions+=(dom json libxml mbstring xml xmlwriter)
   elif [ "$tool" = "phpunit-bridge" ]; then
@@ -162,9 +158,9 @@ add_tools_helper() {
     fi
   elif [ "$tool" = "vapor-cli" ]; then
     extensions+=(fileinfo json mbstring zip simplexml)
-    sudo ln -s "$scoped_dir"/vendor/bin/vapor "$scoped_dir"/vendor/bin/vapor-cli
+    sudo ln -s "$scoped_dir"/vendor/bin/vapor "$scoped_dir"/vendor/bin/vapor-cli 2>/dev/null || true
   elif [ "$tool" = wp-cli ]; then
-    sudo ln -s "$tool_path" "$tool_path_dir"/"${tool%-*}"
+    sudo ln -s "$tool_path" "$tool_path_dir"/"${tool%-*}" 2>/dev/null || true
   fi
   for extension in "${extensions[@]}"; do
     add_extension "$extension" extension >/dev/null 2>&1

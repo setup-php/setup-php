@@ -158,12 +158,7 @@ Function Add-ToolsHelper() {
   } elseif($tool -eq "cs2pr") {
     (Get-Content $bin_dir/cs2pr).replace('exit(9)', 'exit(0)') | Set-Content $bin_dir/cs2pr
   } elseif($tool -eq "deployer") {
-    if(Test-Path $composer_bin\deployer.phar.bat) {
-      Copy-Item $composer_bin\deployer.phar.bat -Destination $composer_bin\dep.bat
-    }
-    if(Test-Path $composer_bin\dep.bat) {
-      Copy-Item $composer_bin\dep.bat -Destination $composer_bin\deployer.bat
-    }
+    Copy-Item $bin_dir\deployer.bat -Destination $bin_dir\dep.bat
   } elseif($tool -eq "phan") {
     $extensions += @('fileinfo', 'ast')
   } elseif($tool -eq "phinx") {
