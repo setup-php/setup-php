@@ -140,7 +140,7 @@ export async function filterList(tools_list: string[]): Promise<string[]> {
     case matches[0] == undefined:
       break;
     default:
-      composer = matches[matches.length - 1].replace(/v(\d\S*)/, '$1');
+      composer = matches.at(-1)!.replace(/v(\d\S*)/, '$1');
       break;
   }
   tools_list.unshift(composer);
@@ -488,7 +488,7 @@ export async function getData(
   const tool = parts[0];
   const version = parts[1];
   let data: RS;
-  if (Object.keys(json_objects).includes(tool)) {
+  if (Object.hasOwn(json_objects, tool)) {
     data = json_objects[tool];
     data['tool'] = tool;
   } else {

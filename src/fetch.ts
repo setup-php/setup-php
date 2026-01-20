@@ -1,4 +1,9 @@
 /**
+ * Redirect status codes set for O(1) lookup
+ */
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
+
+/**
  * Function to fetch a URL using native fetch API (Node 24+)
  *
  * @param input_url
@@ -26,10 +31,7 @@ export async function fetch(
     if (response.ok) {
       const data = await response.text();
       return {data};
-    } else if (
-      [301, 302, 303, 307, 308].includes(response.status) &&
-      redirect_count <= 0
-    ) {
+    } else if (REDIRECT_CODES.has(response.status) && redirect_count <= 0) {
       return {error: `${response.status}: Redirect error`};
     } else {
       return {error: `${response.status}: ${response.statusText}`};
