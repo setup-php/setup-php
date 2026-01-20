@@ -46,14 +46,14 @@ export async function getSemverVersion(data: RS): Promise<string> {
       fixedToOriginal.set(f, t);
       return f;
     });
-    fixed.sort((a, b) => {
+    const sorted = fixed.toSorted((a, b) => {
       try {
         return cv.compareVersions(b, a);
       } catch {
         return b.localeCompare(a, 'en', {numeric: true, sensitivity: 'base'});
       }
     });
-    return fixedToOriginal.get(fixed[0]) ?? fixed[0];
+    return fixedToOriginal.get(sorted[0]) ?? sorted[0];
   }
 }
 
@@ -74,13 +74,10 @@ export async function getLatestVersion(data: RS): Promise<string> {
       ...resp['data'].matchAll(/releases\/tag\/([a-zA-Z]*)?(\d+.\d+.\d+)"/g)
     ].map(match => match[2]);
 
-    return (
-      releases
-        .sort((a: string, b: string) =>
-          a.localeCompare(b, undefined, {numeric: true})
-        )
-        .pop() || 'latest'
+    const sorted = releases.toSorted((a: string, b: string) =>
+      a.localeCompare(b, undefined, {numeric: true})
     );
+    return sorted.at(-1) || 'latest';
   }
   return 'latest';
 }

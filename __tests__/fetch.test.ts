@@ -19,7 +19,9 @@ it('checking fetch', async () => {
       Location: host_url + '/pong'
     })
     .get('/pong')
-    .reply(200, 'pong');
+    .reply(200, 'pong')
+    .get('/error')
+    .replyWithError('Network failure');
 
   let response: Record<string, string> = await fetch.fetch(manifest_url);
   expect(response.error).toBe(undefined);
@@ -35,5 +37,9 @@ it('checking fetch', async () => {
 
   response = await fetch.fetch(manifest_url, 'invalid_token');
   expect(response.error).not.toBe(undefined);
+  expect(response.data).toBe(undefined);
+
+  response = await fetch.fetch(host_url + '/error');
+  expect(response.error).toContain('Fetch error:');
   expect(response.data).toBe(undefined);
 });
