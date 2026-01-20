@@ -1,8 +1,8 @@
 import path from 'path';
 import fs from 'fs';
 import {exec} from '@actions/exec';
-import * as core from '@actions/core';
 import * as config from './config';
+import * as core from './core';
 import * as coverage from './coverage';
 import * as extensions from './extensions';
 import * as tools from './tools';
