@@ -200,30 +200,48 @@ Function Add-Tool() {
     [Parameter(Position = 2, Mandatory = $false)]
     $ver_param
   )
-  if (Test-Path $bin_dir\$tool) {
-    Copy-Item $bin_dir\$tool -Destination $bin_dir\$tool.old -Force
-  }
+  $urls = $urls -split ','
   $tool_path = "$bin_dir\$tool"
-  foreach ($url in $urls){
-    if (($url | Split-Path -Extension) -eq ".exe") {
-      $tool_path = "$tool_path.exe"
-    }
-    try {
-      $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
-    } catch {
-      if($url -match '.*github.com.*releases.*latest.*') {
-        try {
-          $url = $url.replace("releases/latest/download", "releases/download/" + ([regex]::match((Get-File -Url ($url.split('/release')[0] + "/releases")).Content, "([0-9]+\.[0-9]+\.[0-9]+)/" + ($url.Substring($url.LastIndexOf("/") + 1))).Groups[0].Value).split('/')[0])
-          $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
-        } catch { }
+  $is_exe = ((($urls[0] | Split-Path -Extension).ToLowerInvariant()) -eq '.exe')
+  if ($is_exe) { $tool_path = "$tool_path.exe" }
+  $tool_ext = if ($is_exe) { '.exe' } else { '' }
+  $url_stream = [System.IO.MemoryStream]::New([System.Text.Encoding]::UTF8.GetBytes($urls[0]))
+  $cache_key = (Get-FileHash -InputStream $url_stream -Algorithm SHA256).Hash.Substring(0, 16)
+  $cache_path = "$env:TEMP\$tool-$cache_key$tool_ext"
+  $status_code = 200
+  if (Test-Path $cache_path -PathType Leaf) {
+    Copy-Item $cache_path -Destination $tool_path -Force
+  } else {
+    $backup_path = "$tool_path.bak"
+    if (Test-Path $tool_path) { Copy-Item $tool_path -Destination $backup_path -Force }
+    foreach ($url in $urls){
+      try {
+        $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
+      } catch {
+        if($url -match '.*github.com.*releases.*latest.*') {
+          try {
+            $url = $url.replace("releases/latest/download", "releases/download/" + ([regex]::match((Get-File -Url ($url.split('/release')[0] + "/releases")).Content, "([0-9]+\.[0-9]+\.[0-9]+)/" + ($url.Substring($url.LastIndexOf("/") + 1))).Groups[0].Value).split('/')[0])
+            $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
+          } catch {
+            $status_code = 0
+          }
+        } else {
+          $status_code = 0
+        }
+      }
+      if($status_code -eq 200 -and (Test-Path $tool_path)) {
+        Copy-Item $tool_path -Destination $cache_path -Force
+        break
       }
     }
-    if($status_code -eq 200 -and (Test-Path $tool_path)) {
-      break
+    if ($status_code -ne 200 -and (Test-Path $backup_path)) {
+      Copy-Item $backup_path -Destination $tool_path -Force
     }
+    Remove-Item $backup_path -Force -ErrorAction SilentlyContinue
   }
 
-  if (((Get-ChildItem -Path $bin_dir/* | Where-Object Name -Match "^$tool(.exe|.phar)*$").Count -gt 0)) {
+  $escaped_tool = [regex]::Escape($tool)
+  if (((Get-ChildItem -Path $bin_dir/* | Where-Object Name -Match "^$escaped_tool(\.exe|\.phar)?$").Count -gt 0)) {
     $bat_content = @()
     $bat_content += "@ECHO off"
     $bat_content += "setlocal DISABLEDELAYEDEXPANSION"
@@ -237,8 +255,6 @@ Function Add-Tool() {
   } else {
     if($tool -eq "composer") {
       $env:fail_fast = 'true'
-    } elseif (Test-Path $bin_dir\$tool.old) {
-      Copy-Item $bin_dir\$tool.old -Destination $bin_dir\$tool -Force
     }
     Add-Log $cross $tool "Could not add $tool"
   }

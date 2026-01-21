@@ -177,14 +177,25 @@ add_tool() {
     sudo mkdir -p "$tool_path_dir"
   fi
   add_path "$tool_path_dir"
-  if [ -e "$tool_path" ]; then
-    sudo cp -aL "$tool_path" /tmp/"$tool"
-  fi
   IFS="," read -r -a url <<<"$url"
-  status_code=$(get -v -e "$tool_path" "${url[@]}")
-  if [ "$status_code" != "200" ] && [[ "${url[0]}" =~ .*github.com.*releases.*latest.* ]]; then
-    url[0]="${url[0]//releases\/latest\/download/releases/download/$(get -s -n "" "$(echo "${url[0]}" | cut -d '/' -f '1-5')/releases" | grep -Eo -m 1 "([0-9]+\.[0-9]+\.[0-9]+)/$(echo "${url[0]}" | sed -e "s/.*\///")" | cut -d '/' -f 1)}"
-    status_code=$(get -v -e "$tool_path" "${url[0]}")
+  cache_key=$(get_sha256 "${url[0]}" | head -c 16)
+  cache_path="/tmp/${tool}-${cache_key}"
+  status_code="200"
+  if [ -f "$cache_path" ]; then
+    sudo cp -a "$cache_path" "$tool_path"
+  else
+    [ -f "$tool_path" ] && sudo cp -a "$tool_path" "$tool_path.bak"
+    status_code=$(get -v -e "$tool_path" "${url[@]}")
+    if [ "$status_code" != "200" ] && [[ "${url[0]}" =~ .*github.com.*releases.*latest.* ]]; then
+      url[0]="${url[0]//releases\/latest\/download/releases/download/$(get -s -n "" "$(echo "${url[0]}" | cut -d '/' -f '1-5')/releases" | grep -Eo -m 1 "([0-9]+\.[0-9]+\.[0-9]+)/$(echo "${url[0]}" | sed -e "s/.*\///")" | cut -d '/' -f 1)}"
+      status_code=$(get -v -e "$tool_path" "${url[0]}")
+    fi
+    if [ "$status_code" = "200" ]; then
+      sudo cp -a "$tool_path" "$cache_path"
+    elif [ -f "$tool_path.bak" ]; then
+      sudo mv "$tool_path.bak" "$tool_path"
+    fi
+    sudo rm -f "$tool_path.bak"
   fi
   if [ "$status_code" = "200" ]; then
     add_tools_helper "$tool"
@@ -193,8 +204,6 @@ add_tool() {
   else
     if [ "$tool" = "composer" ]; then
       export fail_fast=true
-    elif [ -e /tmp/"$tool" ]; then
-      sudo cp -a /tmp/"$tool" "$tool_path"
     fi
     if [ "$status_code" = "404" ]; then
       add_log "$cross" "$tool" "Failed to download $tool from ${url[*]}"
