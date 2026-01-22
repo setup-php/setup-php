@@ -176,10 +176,14 @@ add_tool() {
   if ! [ -d "$tool_path_dir" ]; then
     sudo mkdir -p "$tool_path_dir"
   fi
-  add_path "$tool_path_dir"
+  if ! [ -d "$tool_cache_path_dir" ]; then
+    sudo mkdir -p "$tool_cache_path_dir"
+  fi
+  add_path "$tool_path_dir" verify
+  add_path "$tool_cache_path_dir"
   IFS="," read -r -a url <<<"$url"
   cache_key=$(get_sha256 "${url[0]}" | head -c 16)
-  cache_path="/tmp/${tool}-${cache_key}"
+  cache_path="$tool_cache_path_dir/${tool}-${cache_key}"
   status_code="200"
   if [ -f "$cache_path" ]; then
     sudo cp -a "$cache_path" "$tool_path"
@@ -199,6 +203,7 @@ add_tool() {
   fi
   if [ "$status_code" = "200" ]; then
     add_tools_helper "$tool"
+    [ -L "$tool_cache_path_dir/$tool" ] || sudo ln -s "$tool_path" "$tool_cache_path_dir/$tool" 2>/dev/null || true
     tool_version=$(get_tool_version "$tool" "$ver_param")
     add_log "${tick:?}" "$tool" "Added $tool $tool_version"
   else

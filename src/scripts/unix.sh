@@ -58,6 +58,7 @@ read_env() {
      -n "$ACT" || -n "$CONTAINER" ]] && _runner=self-hosted || _runner=github
   runner="${runner:-${RUNNER:-$_runner}}"
   tool_path_dir="${setup_php_tools_dir:-${SETUP_PHP_TOOLS_DIR:-/usr/local/bin}}"
+  tool_cache_path_dir="${setup_php_tool_cache_dir:-${SETUP_PHP_TOOL_CACHE_DIR:-${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/setup-php/tools}}"  
 
   if [[ "$runner" = "github" && $_runner = "self-hosted" ]]; then
     fail_fast=true
@@ -79,6 +80,7 @@ read_env() {
   export update
   export ts
   export tool_path_dir
+  export tool_cache_path_dir
 }
 
 # Function to create a lock.
@@ -169,14 +171,15 @@ get_shell_profile() {
 # Function to add a path to the PATH variable.
 add_path() {
   path_to_add=$1
-  [[ ":$PATH:" == *":$path_to_add:"* ]] && return
+  action=$2
+  [[ "$action" == "verify" && ":$PATH:" == *":$path_to_add:"* ]] && return
   if [[ -n "$GITHUB_PATH" ]]; then
-    echo "$path_to_add" | tee -a "$GITHUB_PATH" >/dev/null 2>&1
+    printf '%s\n%s' "$path_to_add" "$(grep -v "^${path_to_add}$" "$GITHUB_PATH" 2>/dev/null)" > "$GITHUB_PATH"
   else
     profile=$(get_shell_profile)
     ([ -e "$profile" ] && grep -q ":$path_to_add\"" "$profile" 2>/dev/null) || echo "export PATH=\"\${PATH:+\${PATH}:}\"$path_to_add" | sudo tee -a "$profile" >/dev/null 2>&1
   fi
-  export PATH="${PATH:+${PATH}:}$path_to_add"
+  [[ ":$PATH:" == *":$path_to_add:"* ]] || export PATH="${PATH:+${PATH}:}$path_to_add"
 }
 
 # Function to add environment variables using a PATH.

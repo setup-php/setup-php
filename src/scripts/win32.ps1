@@ -81,9 +81,10 @@ Function Get-PathFromRegistry {
 # Function to add a location to PATH.
 Function Add-Path {
   param(
-    [string]$PathItem
+    [string]$PathItem,
+    [switch]$Force
   )
-  if("$env:PATH;".contains("$PathItem;")) {
+  if(-not($Force) -and "$env:PATH;".contains("$PathItem;")) {
     return
   }
   if ($env:GITHUB_PATH) {
@@ -375,6 +376,7 @@ if(-not($env:ImageOS) -and -not($env:ImageVersion)) {
   if(-not(Test-Path -LiteralPath $current_profile)) {
     New-Item -Path $current_profile -ItemType "file" -Force >$null 2>&1
   }
+  Add-Path -PathItem $bin_dir -Force
 }
 
 $src = Join-Path -Path $PSScriptRoot -ChildPath \..
