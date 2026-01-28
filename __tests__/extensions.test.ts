@@ -131,7 +131,11 @@ describe('Extension tests', () => {
       )
         ? `add_${ext_name}`
         : `add_brew_extension ${formula} ${prefix}`;
-      return [formula, formula === 'phalcon3' ? '7.3' : '7.4', output];
+      return [
+        formula,
+        formula.match(/phalcon3|lua|propro/) ? '7.3' : '8.1',
+        output
+      ];
     });
 
   it.each(data)(
