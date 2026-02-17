@@ -85,13 +85,14 @@ export async function addExtensionDarwin(
         add_script += await utils.getUnsupportedLog('pcov', version, 'darwin');
         return;
       // match brew extensions
-      case /(?<!5\.[3-5])(amqp|apcu|expect|gnupg|grpc|igbinary|imagick|imap|mailparse|mcrypt|memcache|memcached|mongodb|msgpack|protobuf|psr|raphf|rdkafka|redis|snmp|ssh2|swoole|uuid|vld|xdebug|xdebug2|yaml|zmq)/.test(
+      case /(?<!5\.[3-5])(amqp|apcu|brotli|excimer|expect|gmagick|gnupg|grpc|igbinary|imagick|imap|interbase|mailparse|maxminddb|mcrypt|memcache|memcached|mongodb|mongodb1|msgpack|newrelic|oauth|opentelemetry|pdo_firebird|pinba|protobuf|psr|raphf|rdkafka|redis|scalar_objects|seaslog|snmp|spx|ssh2|swoole|uopz|uploadprogress|uuid|vld|xdebug|xdebug2|xhprof|yaml|zmq|zstd)/.test(
         version_extension
       ):
       case /(?<!5\.[3-6])(ds|v8js)/.test(version_extension):
       case /(5\.6|7\.[0-4])(propro|lua)/.test(version_extension):
       case /(?<!5\.[3-6]|7\.0)pcov/.test(version_extension):
       case /(?<!5\.[3-6])(ast|vips|xlswriter)/.test(version_extension):
+      case /^(8\.[0-5])swow$/.test(version_extension):
         add_script += await utils.joins(
           '\nadd_brew_extension',
           ext_name,

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import * as path from 'path';
-import * as core from '@actions/core';
+import * as core from './core';
 import * as fetch from './fetch';
 
 /**
@@ -97,9 +97,8 @@ export async function parseIniFile(ini_file: string): Promise<string> {
 }
 
 /**
- * Async foreach loop
+ * Async foreach loop using modern for...of pattern
  *
- * @author https://github.com/Atinux
  * @param array
  * @param callback
  */
@@ -111,8 +110,8 @@ export async function asyncForEach(
     array: Array<string>
   ) => Promise<void>
 ): Promise<void> {
-  for (let index = 0; index < array.length; index++) {
-    await callback(array[index], index, array);
+  for (const [index, element] of array.entries()) {
+    await callback(element, index, array);
   }
 }
 
