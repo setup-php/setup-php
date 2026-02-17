@@ -123,19 +123,15 @@ add_tools_helper() {
     extensions+=(iconv mbstring phar sodium)
   elif [ "$tool" = "codeception" ]; then
     extensions+=(json mbstring)
-    sudo ln -s "$scoped_dir"/vendor/bin/codecept "$scoped_dir"/vendor/bin/codeception
+    sudo ln -s "$scoped_dir"/vendor/bin/codecept "$scoped_dir"/vendor/bin/codeception 2>/dev/null || true
   elif [ "$tool" = "composer" ]; then
     configure_composer "$tool_path"
   elif [ "$tool" = "cs2pr" ]; then
     sudo sed -i 's/\r$//; s/exit(9)/exit(0)/' "$tool_path" 2>/dev/null ||
     sudo sed -i '' 's/\r$//; s/exit(9)/exit(0)/' "$tool_path"
   elif [ "$tool" = "deployer" ]; then
-    if [ -e "$composer_bin"/deployer.phar ]; then
-      sudo ln -s "$composer_bin"/deployer.phar "$composer_bin"/dep
-    fi
-    if [ -e "$composer_bin"/dep ]; then
-      sudo ln -s "$composer_bin"/dep "$composer_bin"/deployer
-    fi
+    sudo ln -s "$tool_path" "$tool_path_dir"/deployer 2>/dev/null || true
+    sudo ln -s "$tool_path" "$tool_path_dir"/dep 2>/dev/null || true
   elif [ "$tool" = "phan" ]; then
     extensions+=(fileinfo ast)
   elif [ "$tool" = "phinx" ]; then
@@ -151,7 +147,7 @@ add_tools_helper() {
   elif [ "$tool" = "phpDocumentor" ]; then
     extensions+=(ctype hash json fileinfo iconv mbstring simplexml xml)
     sudo ln -s "$tool_path" "$tool_path_dir"/phpdocumentor 2>/dev/null || true
-    sudo ln -s "$tool_path" "$tool_path_dir"/phpdoc
+    sudo ln -s "$tool_path" "$tool_path_dir"/phpdoc 2>/dev/null || true
   elif [ "$tool" = "phpunit" ]; then
     extensions+=(dom json libxml mbstring xml xmlwriter)
   elif [ "$tool" = "phpunit-bridge" ]; then
@@ -162,9 +158,9 @@ add_tools_helper() {
     fi
   elif [ "$tool" = "vapor-cli" ]; then
     extensions+=(fileinfo json mbstring zip simplexml)
-    sudo ln -s "$scoped_dir"/vendor/bin/vapor "$scoped_dir"/vendor/bin/vapor-cli
+    sudo ln -s "$scoped_dir"/vendor/bin/vapor "$scoped_dir"/vendor/bin/vapor-cli 2>/dev/null || true
   elif [ "$tool" = wp-cli ]; then
-    sudo ln -s "$tool_path" "$tool_path_dir"/"${tool%-*}"
+    sudo ln -s "$tool_path" "$tool_path_dir"/"${tool%-*}" 2>/dev/null || true
   fi
   for extension in "${extensions[@]}"; do
     add_extension "$extension" extension >/dev/null 2>&1
@@ -180,25 +176,39 @@ add_tool() {
   if ! [ -d "$tool_path_dir" ]; then
     sudo mkdir -p "$tool_path_dir"
   fi
-  add_path "$tool_path_dir"
-  if [ -e "$tool_path" ]; then
-    sudo cp -aL "$tool_path" /tmp/"$tool"
+  if ! [ -d "$tool_cache_path_dir" ]; then
+    sudo mkdir -p "$tool_cache_path_dir"
   fi
+  add_path "$tool_path_dir" verify
+  add_path "$tool_cache_path_dir"
   IFS="," read -r -a url <<<"$url"
-  status_code=$(get -v -e "$tool_path" "${url[@]}")
-  if [ "$status_code" != "200" ] && [[ "${url[0]}" =~ .*github.com.*releases.*latest.* ]]; then
-    url[0]="${url[0]//releases\/latest\/download/releases/download/$(get -s -n "" "$(echo "${url[0]}" | cut -d '/' -f '1-5')/releases" | grep -Eo -m 1 "([0-9]+\.[0-9]+\.[0-9]+)/$(echo "${url[0]}" | sed -e "s/.*\///")" | cut -d '/' -f 1)}"
-    status_code=$(get -v -e "$tool_path" "${url[0]}")
+  cache_key=$(get_sha256 "${url[0]}" | head -c 16)
+  cache_path="$tool_cache_path_dir/${tool}-${cache_key}"
+  status_code="200"
+  if [ -f "$cache_path" ]; then
+    sudo cp -a "$cache_path" "$tool_path"
+  else
+    [ -f "$tool_path" ] && sudo cp -a "$tool_path" "$tool_path.bak"
+    status_code=$(get -v -e "$tool_path" "${url[@]}")
+    if [ "$status_code" != "200" ] && [[ "${url[0]}" =~ .*github.com.*releases.*latest.* ]]; then
+      url[0]="${url[0]//releases\/latest\/download/releases/download/$(get -s -n "" "$(echo "${url[0]}" | cut -d '/' -f '1-5')/releases" | grep -Eo -m 1 "([0-9]+\.[0-9]+\.[0-9]+)/$(echo "${url[0]}" | sed -e "s/.*\///")" | cut -d '/' -f 1)}"
+      status_code=$(get -v -e "$tool_path" "${url[0]}")
+    fi
+    if [ "$status_code" = "200" ]; then
+      sudo cp -a "$tool_path" "$cache_path"
+    elif [ -f "$tool_path.bak" ]; then
+      sudo mv "$tool_path.bak" "$tool_path"
+    fi
+    sudo rm -f "$tool_path.bak"
   fi
   if [ "$status_code" = "200" ]; then
     add_tools_helper "$tool"
+    [ -L "$tool_cache_path_dir/$tool" ] || sudo ln -s "$tool_path" "$tool_cache_path_dir/$tool" 2>/dev/null || true
     tool_version=$(get_tool_version "$tool" "$ver_param")
     add_log "${tick:?}" "$tool" "Added $tool $tool_version"
   else
     if [ "$tool" = "composer" ]; then
       export fail_fast=true
-    elif [ -e /tmp/"$tool" ]; then
-      sudo cp -a /tmp/"$tool" "$tool_path"
     fi
     if [ "$status_code" = "404" ]; then
       add_log "$cross" "$tool" "Failed to download $tool from ${url[*]}"

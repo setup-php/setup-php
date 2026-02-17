@@ -3,7 +3,7 @@
     "declaration": true,
     "esModuleInterop": true,
     "lib": [
-      "ES2021"
+      "ES2024"
     ],
     "module": "commonjs",
     "moduleResolution": "node",
@@ -13,7 +13,7 @@
     "rootDir": "./src",
     "sourceMap": true,
     "strict": true,
-    "target": "ES2021"
+    "target": "ES2024"
   },
   "exclude": ["__tests__", "lib", "node_modules"]
 }
