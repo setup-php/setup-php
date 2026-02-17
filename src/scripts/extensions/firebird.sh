@@ -1,17 +1,3 @@
-add_firebird_client_darwin() {
-  firebird_tag='v5.0.0'
-  arch_name='x64'
-  arch="$(uname -m)"
-  [[ "$arch" = "arm64" || "$arch" = "aarch64" ]] && arch_name='arm64'
-  pkg_name=$(get -s -n "" https://api.github.com/repos/FirebirdSQL/firebird/releases/tags/"$firebird_tag" | grep -Eo "Firebird-.*.-$arch_name.pkg" | head -n 1)
-  [ -z "$pkg_name" ] && pkg_name=$(get -s -n "" https://github.com/FirebirdSQL/firebird/releases/expanded_assets/"$firebird_tag" | grep -Eo "Firebird-.*.-$arch_name.pkg" | head -n 1)
-  get -q -e "/tmp/firebird.pkg" https://github.com/FirebirdSQL/firebird/releases/download/"$firebird_tag"/"$pkg_name"
-  sudo installer -pkg /tmp/firebird.pkg -target /
-  sudo mkdir -p /opt/firebird/include /opt/firebird/lib
-  sudo cp -a /Library/Frameworks/Firebird.framework/Headers/* /opt/firebird/include/
-  sudo find /Library/Frameworks/Firebird.framework -name '*.dylib' -exec cp "{}" /opt/firebird/lib \;
-}
-
 add_firebird_helper() {
   firebird_dir=$1
   tag="$(php_src_tag)"
@@ -23,13 +9,10 @@ add_firebird_helper() {
 }
 
 add_firebird() {
-  if [ "$(uname -s )" = "Darwin" ]; then
-    add_firebird_client_darwin >/dev/null 2>&1
-  fi
   enable_extension pdo_firebird extension
-  status="Enabled"
-  if ! check_extension pdo_firebird; then
-    status="Installed and enabled"
+  if check_extension pdo_firebird; then
+    add_log "${tick:?}" pdo_firebird Enabled
+  else
     if [ "$(uname -s)" = "Linux" ]; then
       if [[ "${version:?}" =~ 5.3|${php_builder_versions:?} ]]; then
         add_firebird_helper /usr >/dev/null 2>&1
@@ -37,8 +20,8 @@ add_firebird() {
         add_pdo_extension firebird >/dev/null 2>&1
       fi
     else
-      add_firebird_helper /opt/firebird >/dev/null 2>&1
+      add_brew_extension pdo_firebird extension >/dev/null 2>&1
     fi
+    add_extension_log pdo_firebird "Installed and enabled"
   fi
-  add_extension_log pdo_firebird "$status"
 }
