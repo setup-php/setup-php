@@ -3,16 +3,6 @@ import * as path from 'path';
 import * as utils from '../src/utils';
 import * as fetchModule from '../src/fetch';
 
-/**
- * Mock @actions/core
- */
-jest.mock('@actions/core', () => ({
-  getInput: jest.fn().mockImplementation(key => {
-    return ['setup-php'].indexOf(key) !== -1 ? key : '';
-  }),
-  info: jest.fn()
-}));
-
 describe('Utils tests', () => {
   it('checking readEnv', async () => {
     process.env['test'] = 'setup-php';
@@ -26,12 +16,14 @@ describe('Utils tests', () => {
 
   it('checking getInput', async () => {
     process.env['test'] = 'setup-php';
+    process.env['INPUT_SETUP-PHP'] = 'setup-php';
     expect(await utils.getInput('test', false)).toBe('setup-php');
     expect(await utils.getInput('setup-php', false)).toBe('setup-php');
     expect(await utils.getInput('DoesNotExist', false)).toBe('');
     await expect(async () => {
       await utils.getInput('DoesNotExist', true);
     }).rejects.toThrow('Input required and not supplied: DoesNotExist');
+    delete process.env['INPUT_SETUP-PHP'];
   });
 
   it('checking getManifestURL', async () => {
