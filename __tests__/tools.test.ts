@@ -31,6 +31,12 @@ function getData(data: Partial<ToolData>): ToolData {
   };
 }
 
+function unsetComposerAuthEnv(): void {
+  delete process.env['GITHUB_TOKEN'];
+  delete process.env['COMPOSER_TOKEN'];
+  delete process.env['COMPOSER_AUTH_JSON'];
+}
+
 /**
  * Mock fetch.ts
  */
@@ -181,6 +187,7 @@ describe('Tools tests', () => {
     ${'1.2.3-dev'}     | ${'tool'}     | ${'phar'}     | ${'1.2.3-dev'}
     ${'1.2.3-alpha1'}  | ${'tool'}     | ${'phar'}     | ${'1.2.3-alpha1'}
     ${'1.2.3-alpha.1'} | ${'tool'}     | ${'phar'}     | ${'1.2.3-alpha.1'}
+    ${'1.>=0'}         | ${'tool'}     | ${'phar'}     | ${'1.0'}
   `(
     'checking getVersion: $version, $tool, $type',
     async ({version, tool, type, expected}) => {
@@ -298,22 +305,30 @@ describe('Tools tests', () => {
   });
 
   it.each`
-    os           | script                                              | scope
-    ${'linux'}   | ${'add_composer_tool tool tool:1.2.3 user/ global'} | ${'global'}
-    ${'darwin'}  | ${'add_composer_tool tool tool:1.2.3 user/ scoped'} | ${'scoped'}
-    ${'win32'}   | ${'Add-ComposerTool tool tool:1.2.3 user/ scoped'}  | ${'scoped'}
-    ${'openbsd'} | ${'Platform openbsd is not supported'}              | ${'global'}
-  `('checking addPackage: $os, $scope', async ({os, script, scope}) => {
-    const data = getData({
-      tool: 'tool',
-      version: '1.2.3',
-      repository: 'user/tool',
-      os: os,
-      scope: scope
-    });
-    data['release'] = [data['tool'], data['version']].join(':');
-    expect(await tools.addPackage(data)).toContain(script);
-  });
+    os           | release           | scope       | script
+    ${'linux'}   | ${'tool:1.2.3'}   | ${'global'} | ${'add_composer_tool tool tool:1.2.3 user/ global'}
+    ${'darwin'}  | ${'tool:1.2.3'}   | ${'scoped'} | ${'add_composer_tool tool tool:1.2.3 user/ scoped'}
+    ${'win32'}   | ${'tool:1.2.3'}   | ${'scoped'} | ${'Add-ComposerTool tool tool:1.2.3 user/ scoped'}
+    ${'linux'}   | ${'tool:>=1.2'}   | ${'global'} | ${'add_composer_tool tool "tool:>=1.2" user/ global'}
+    ${'win32'}   | ${'tool:>=1.2'}   | ${'global'} | ${'Add-ComposerTool tool "tool:>=1.2" user/ global'}
+    ${'linux'}   | ${'tool:1.*'}     | ${'global'} | ${'add_composer_tool tool "tool:1.*" user/ global'}
+    ${'linux'}   | ${'psalm:^5||^6'} | ${'global'} | ${'add_composer_tool tool "psalm:^5||^6" user/ global'}
+    ${'linux'}   | ${'psalm:>=5,<6'} | ${'global'} | ${'add_composer_tool tool "psalm:>=5,<6" user/ global'}
+    ${'openbsd'} | ${'tool:1.2.3'}   | ${'global'} | ${'Platform openbsd is not supported'}
+  `(
+    'checking addPackage: $os, $release',
+    async ({os, release, scope, script}) => {
+      const data = getData({
+        tool: 'tool',
+        version: '1.2.3',
+        repository: 'user/tool',
+        os,
+        scope
+      });
+      data['release'] = release;
+      expect(await tools.addPackage(data)).toContain(script);
+    }
+  );
 
   it.each`
     version     | php_version | os          | script
@@ -420,6 +435,118 @@ describe('Tools tests', () => {
       if (no_tool_cache !== 'true') {
         expect(await tools.addComposer(data)).toContain(cache_url);
       }
+    }
+  );
+
+  it.each`
+    version            | affected
+    ${'1'}             | ${false}
+    ${'1.0.0-alpha1'}  | ${true}
+    ${'1.0.0-alpha2'}  | ${true}
+    ${'1.0.0-alpha3'}  | ${true}
+    ${'1.0.0-alpha4'}  | ${true}
+    ${'1.0.0-alpha5'}  | ${true}
+    ${'1.0.0-alpha6'}  | ${true}
+    ${'1.0.0-alpha7'}  | ${true}
+    ${'1.0.0-alpha8'}  | ${true}
+    ${'1.0.0-alpha9'}  | ${true}
+    ${'1.0.0-alpha10'} | ${true}
+    ${'1.0.0-alpha11'} | ${true}
+    ${'1.0.0-beta1'}   | ${true}
+    ${'1.0.0-beta2'}   | ${true}
+    ${'1.0.0'}         | ${true}
+    ${'1.10.27'}       | ${true}
+    ${'1.10.28'}       | ${false}
+    ${'2.0.0-alpha1'}  | ${true}
+    ${'2.0.0-alpha2'}  | ${true}
+    ${'2.0.0-alpha3'}  | ${true}
+    ${'2.0.0-RC1'}     | ${true}
+    ${'2.0.0-RC2'}     | ${true}
+    ${'2.2.27'}        | ${true}
+    ${'2.2.28'}        | ${false}
+    ${'2.3.0-RC1'}     | ${true}
+    ${'2.3.0-RC2'}     | ${true}
+    ${'2.9.7'}         | ${true}
+    ${'2.9.7-RC1'}     | ${true}
+    ${'2.9.8'}         | ${false}
+    ${'2.9.0RC1'}      | ${false}
+    ${'2.9.x-dev'}     | ${false}
+  `('checking affected composer version: $version', ({version, affected}) => {
+    expect(tools.skipGitHubAuthForComposerVersion(version)).toBe(affected);
+  });
+
+  it('checking affected composer version with CRLF ranges', async () => {
+    let affected = false;
+    let fixed = true;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('fs', () => ({
+        ...jest.requireActual('fs'),
+        readFileSync: (
+          filePath: fs.PathOrFileDescriptor,
+          options?: unknown
+        ) => {
+          if (String(filePath).includes('composer-gh-auth-no-op')) {
+            return '1.0.0-0 1.10.28\r\n2.0.0-0 2.2.28\r\n2.3.0-0 2.9.8';
+          }
+          return (jest.requireActual('fs') as typeof fs).readFileSync(
+            filePath,
+            options as fs.ObjectEncodingOptions & {flag?: string}
+          );
+        }
+      }));
+      const isolatedTools = await import('../src/tools');
+      affected = isolatedTools.skipGitHubAuthForComposerVersion('2.9.7');
+      fixed = isolatedTools.skipGitHubAuthForComposerVersion('2.9.8');
+    });
+    expect(affected).toBe(true);
+    expect(fixed).toBe(false);
+  });
+
+  it.each`
+    auth_json                                                                                                          | expected
+    ${'{"github-oauth":{"github.com":"ghs_new-token"},"http-basic":{"repo.example":{"username":"u","password":"p"}}}'} | ${'{"http-basic":{"repo.example":{"username":"u","password":"p"}}}'}
+    ${'{"github-oauth":{"github.com":"ghs_new-token"}}'}                                                               | ${undefined}
+    ${'{"http-basic":{"repo.example":{"username":"u","password":"p"}}}'}                                               | ${'{"http-basic":{"repo.example":{"username":"u","password":"p"}}}'}
+    ${'{"nested":{"github-oauth":{"github.com":"ghs_new-token"}}}'}                                                    | ${'{"nested":{"github-oauth":{"github.com":"ghs_new-token"}}}'}
+    ${'{"github-oauth":'}                                                                                              | ${'{"github-oauth":'}
+  `('cleaning composer auth json', ({auth_json, expected}) => {
+    unsetComposerAuthEnv();
+    process.env['COMPOSER_AUTH_JSON'] = auth_json;
+    tools.cleanComposerAuthJson();
+    expect(process.env['COMPOSER_AUTH_JSON']).toBe(expected);
+    unsetComposerAuthEnv();
+  });
+
+  it.each`
+    version     | os         | envs                                                                                       | skip_github_auth
+    ${'latest'} | ${'linux'} | ${{GITHUB_TOKEN: 'ghs_token'}}                                                             | ${false}
+    ${'1'}      | ${'linux'} | ${{GITHUB_TOKEN: 'ghs_token'}}                                                             | ${false}
+    ${'2'}      | ${'linux'} | ${{GITHUB_TOKEN: 'ghs_token'}}                                                             | ${false}
+    ${'2.9.7'}  | ${'linux'} | ${{}}                                                                                      | ${true}
+    ${'2.9.7'}  | ${'linux'} | ${{GITHUB_TOKEN: 'ghs_token'}}                                                             | ${true}
+    ${'2.9.7'}  | ${'linux'} | ${{COMPOSER_TOKEN: 'ghs_token'}}                                                           | ${true}
+    ${'2.9.7'}  | ${'linux'} | ${{COMPOSER_AUTH_JSON: '{"github-oauth":{"github.com":"ghs_new-token"}}'}}                 | ${true}
+    ${'2.9.7'}  | ${'linux'} | ${{COMPOSER_AUTH_JSON: '{"http-basic":{"repo.example":{"username":"u","password":"p"}}}'}} | ${true}
+    ${'2.9.8'}  | ${'linux'} | ${{GITHUB_TOKEN: 'ghs_token'}}                                                             | ${false}
+    ${'2.9.7'}  | ${'win32'} | ${{GITHUB_TOKEN: 'ghs_token'}}                                                             | ${true}
+  `(
+    'checking composer github auth skip flag: $version, $os',
+    async ({version, os, envs, skip_github_auth}) => {
+      unsetComposerAuthEnv();
+      Object.assign(process.env, envs);
+      const data = getData({
+        tool: 'composer',
+        os: os,
+        php_version: '7.4',
+        domain: 'https://getcomposer.org',
+        repository: 'composer/composer',
+        version: version
+      });
+      const script = await tools.addComposer(data);
+      expect(script).toContain(
+        `composer ${version}${skip_github_auth ? ' true' : ''}`
+      );
+      unsetComposerAuthEnv();
     }
   );
 
@@ -533,7 +660,7 @@ describe('Tools tests', () => {
         'add_devtools phpize',
         'add_tool https://github.com/phpmd/phpmd/releases/latest/download/phpmd.phar phpmd "--version"',
         'add_tool https://github.com/phpspec/phpspec/releases/latest/download/phpspec.phar phpspec "-V"',
-        'add_composer_tool phpunit-bridge phpunit-bridge:5.6.* symfony/ global',
+        'add_composer_tool phpunit-bridge "phpunit-bridge:5.6.*" symfony/ global',
         'add_composer_tool phpunit-polyfills phpunit-polyfills:1.0.1 yoast/ global',
         'add_protoc 1.2.3',
         'add_tool https://github.com/vimeo/psalm/releases/latest/download/psalm.phar psalm "-v"',
@@ -593,7 +720,7 @@ describe('Tools tests', () => {
         'Add-ComposerTool codeception codeception codeception/ global',
         'Add-ComposerTool prestissimo prestissimo hirak/ global',
         'Add-ComposerTool automatic-composer-prefetcher automatic-composer-prefetcher narrowspark/ global',
-        'Add-ComposerTool phinx phinx:1.2.* robmorgan/ scoped',
+        'Add-ComposerTool phinx "phinx:1.2.*" robmorgan/ scoped',
         'Add-ComposerTool phinx phinx:^1.2 robmorgan/ global',
         'Add-ComposerTool tool tool:1.2.3 user/ global',
         'Add-ComposerTool tool tool:~1.2 user/ global'
@@ -642,6 +769,7 @@ describe('Tools tests', () => {
     ${'composer:preview'}                                 | ${'add_tool https://github.com/shivammathur/composer-cache/releases/latest/download/composer-7.4-preview.phar,https://artifacts.setup-php.com/composer/composer-7.4-preview.phar,https://dl.cloudsmith.io/public/shivammathur/composer-cache/raw/files/composer-7.4-preview.phar,https://getcomposer.org/composer-preview.phar composer preview'}
     ${'composer, composer:v1'}                            | ${'add_tool https://github.com/shivammathur/composer-cache/releases/latest/download/composer-7.4-1.phar,https://artifacts.setup-php.com/composer/composer-7.4-1.phar,https://dl.cloudsmith.io/public/shivammathur/composer-cache/raw/files/composer-7.4-1.phar,https://getcomposer.org/composer-1.phar composer'}
     ${'composer:v1, composer:preview, composer:snapshot'} | ${'add_tool https://github.com/shivammathur/composer-cache/releases/latest/download/composer-7.4-snapshot.phar,https://artifacts.setup-php.com/composer/composer-7.4-snapshot.phar,https://dl.cloudsmith.io/public/shivammathur/composer-cache/raw/files/composer-7.4-snapshot.phar,https://getcomposer.org/composer.phar composer snapshot'}
+    ${'composer:2.9.7'}                                   | ${'add_tool https://github.com/composer/composer/releases/download/2.9.7/composer.phar,https://getcomposer.org/download/2.9.7/composer.phar composer 2.9.7 true'}
   `('checking composer setup: $tools_csv', async ({tools_csv, script}) => {
     expect(await tools.addTools(tools_csv, '7.4', 'linux')).toContain(script);
   });
