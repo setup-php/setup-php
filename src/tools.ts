@@ -95,6 +95,42 @@ interface DeployerManifestEntry {
   url: string;
 }
 
+export function skipGitHubAuthForComposerVersion(version: string): boolean {
+  if (!/^\d+\.\d+\.\d+(?:-[\w-]+)?$/.test(version)) {
+    return false;
+  }
+  return fs
+    .readFileSync(
+      path.join(__dirname, '../src/configs/composer-gh-auth-no-op'),
+      'utf8'
+    )
+    .trim()
+    .split(/\r?\n/)
+    .some(range => {
+      const [min, max] = range.trim().split(/\s+/);
+      return (
+        cv.compareVersions(version, min) >= 0 &&
+        cv.compareVersions(version, max) < 0
+      );
+    });
+}
+
+export function cleanComposerAuthJson(): void {
+  try {
+    const auth_json = process.env['COMPOSER_AUTH_JSON'] || '';
+    if (!auth_json.includes('github-oauth')) return;
+    const auth = JSON.parse(auth_json);
+    delete auth['github-oauth'];
+    if (!Object.keys(auth).length) {
+      delete process.env['COMPOSER_AUTH_JSON'];
+    } else {
+      process.env['COMPOSER_AUTH_JSON'] = JSON.stringify(auth);
+    }
+  } catch {
+    return;
+  }
+}
+
 /**
  * Function to get version in semver format.
  *
@@ -195,7 +231,7 @@ export async function getVersion(
     case !!data.repository && major_minor_regex.test(data.version):
       return await getSemverVersion(data);
     default:
-      return data.version.replace(/[><=^~]*/, '');
+      return data.version.replace(/[^a-zA-Z0-9_.:@+,/-]/g, '');
   }
 }
 
@@ -311,12 +347,9 @@ export async function addArchive(data: ToolData): Promise<string> {
 export async function addPackage(data: ToolData): Promise<string> {
   const command = await utils.getCommand(data.os, 'composer_tool');
   const parts: string[] = data.repository.split('/');
-  const args: string = await utils.joins(
-    parts[1],
-    data.release,
-    parts[0] + '/',
-    data.scope
-  );
+  const args = [parts[1], data.release, parts[0] + '/', data.scope]
+    .map(a => utils.safeArg(a, data.os))
+    .join(' ');
   return command + args;
 }
 
@@ -383,6 +416,7 @@ export async function addComposer(data: ToolData): Promise<string> {
   const version_source_url = `${getcomposer}/download/${channel}/composer.phar`;
   let cache_url = `${releases_url},${spc_url},${cds_url}`;
   let source_url = `${getcomposer}/composer.phar`;
+  let skip_composer_github_auth = '';
   switch (true) {
     case /^snapshot$/.test(channel):
       source_url = is_lts ? lts_url : source_url;
@@ -393,7 +427,11 @@ export async function addComposer(data: ToolData): Promise<string> {
     case /^1$/.test(channel):
       source_url = channel_source_url;
       break;
-    case /^\d+\.\d+\.\d+[\w-]*$/.test(data.version):
+    case /^\d+\.\d+\.\d+(?:-[\w-]+)?$/.test(data.version):
+      if (skipGitHubAuthForComposerVersion(data.version)) {
+        cleanComposerAuthJson();
+        skip_composer_github_auth = ' true';
+      }
       cache_url = `${github}/${data.repository}/releases/download/${data.version}/composer.phar`;
       source_url = version_source_url;
       break;
@@ -402,7 +440,7 @@ export async function addComposer(data: ToolData): Promise<string> {
   }
   const use_cache: boolean = (await utils.readEnv('NO_TOOLS_CACHE')) !== 'true';
   data.url = use_cache ? `${cache_url},${source_url}` : source_url;
-  data.version_parameter = data.version;
+  data.version_parameter = data.version + skip_composer_github_auth;
   return await addArchive(data);
 }
 
