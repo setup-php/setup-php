@@ -7,21 +7,11 @@ add_license_log() {
   echo "$END_GROUP"
 }
 
-# Function to get the architecture of the installed PHP binary.
-get_oci_arch() {
-  local arch php_binary
-  arch="$(uname -m)"
-  if [ "$os" = 'Darwin' ] && [ "$arch" = 'arm64' ]; then
-    php_binary="$(file -L "$(command -v php)")"
-    [[ "$php_binary" = *x86_64* && "$php_binary" != *arm64* ]] && arch='x86_64'
-  fi
-  echo "$arch"
-}
-
 # Function to install instantclient and SDK.
 add_client() {
   if [ ! -e "$oracle_client" ]; then
     sudo mkdir -p -m 777 "$oracle_home" "$oracle_client"
+    arch="$(uname -m)"
     for package in basiclite sdk; do
       if [ "$os" = 'Linux' ]; then
         libs='/usr/lib/'
@@ -63,18 +53,13 @@ add_client() {
 add_oci_helper() {
   if ! shared_extension "$ext"; then
     status='Installed and enabled'
-    local compatibility_flag compiler=''
+    local compatibility_flag
     if [ "$os" = "Linux" ]; then
       compatibility_flag='-Wno-error=incompatible-pointer-types'
     else
       compatibility_flag='-Wno-incompatible-function-pointer-types'
-      if [ "$(uname -m)" = 'arm64' ] && [ "$arch" = 'x86_64' ]; then
-        printf '%s\n' '#!/bin/sh' 'exec /usr/bin/clang -arch x86_64 "$@"' > /tmp/oci-clang
-        chmod +x /tmp/oci-clang
-        compiler='CC=/tmp/oci-clang'
-      fi
     fi
-    read -r "${ext}_CONFIGURE_PREFIX_OPTS" <<< "$compiler SED=sed CFLAGS=$compatibility_flag"
+    read -r "${ext}_CONFIGURE_PREFIX_OPTS" <<< "SED=sed CFLAGS=$compatibility_flag"
     read -r "${ext}_LINUX_LIBS" <<< "libaio-dev"
     read -r "${ext}_CONFIGURE_OPTS" <<< "--with-php-config=$(command -v php-config) --with-${ext/_/-}=instantclient,$oracle_client"
     patch_phpize
@@ -97,7 +82,6 @@ add_oci() {
   oracle_home='/opt/oracle'
   oracle_client=$oracle_home/instantclient
   os=$(uname -s)
-  arch=$(get_oci_arch)
   add_client >/dev/null 2>&1
   add_oci_helper >/dev/null 2>&1
   add_extension_log "$ext" "$status"
