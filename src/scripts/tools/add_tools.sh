@@ -203,6 +203,27 @@ add_tools_helper() {
   done
 }
 
+# Function to find the newest stable release containing a tool asset.
+get_last_release() {
+  local releases_url="${1%/latest/download/*}"
+  local asset="${1##*/}"
+  local page=1 releases assets_url tag download_path
+  while true; do
+    releases=$(get -s -n "" "$releases_url?page=$page&q=prerelease%3Afalse") || return 1
+    while IFS= read -r assets_url; do
+      [[ "$assets_url" = "$releases_url/expanded_assets/"* ]] || continue
+      tag="${assets_url#"$releases_url/expanded_assets/"}"
+      download_path="${releases_url#https://github.com}/download/$tag/$asset"
+      if get -s -n "" "$assets_url" | grep -Fq "href=\"$download_path\""; then
+        printf 'https://github.com%s\n' "$download_path"
+        return 0
+      fi
+    done <<< "$(printf '%s' "$releases" | grep -Eo 'src="[^"]+/releases/expanded_assets/[^"]+"' | cut -d '"' -f 2)"
+    [[ "$releases" = *'class="next_page"'* ]] || return 1
+    page=$((page + 1))
+  done
+}
+
 # Function to setup a remote tool.
 add_tool() {
   url=$1
@@ -243,9 +264,12 @@ add_tool() {
   else
     [ -f "$tool_path" ] && sudo cp -a "$tool_path" "$tool_path.bak"
     status_code=$(get -v -e "$tool_path" "${url[@]}")
-    if [ "$status_code" != "200" ] && [[ "${url[0]}" =~ .*github.com.*releases.*latest.* ]]; then
-      url[0]="${url[0]//releases\/latest\/download/releases/download/$(get -s -n "" "$(echo "${url[0]}" | cut -d '/' -f '1-5')/releases" | grep -Eo -m 1 "([0-9]+\.[0-9]+\.[0-9]+)/$(echo "${url[0]}" | sed -e "s/.*\///")" | cut -d '/' -f 1)}"
-      status_code=$(get -v -e "$tool_path" "${url[0]}")
+    if [ "$status_code" != "200" ] && [[ "${url[0]}" =~ ^https://github\.com/[^/]+/[^/]+/releases/latest/download/[^/?#]+$ ]]; then
+      local release_url
+      if release_url=$(get_last_release "${url[0]}"); then
+        url[0]="$release_url"
+        status_code=$(get -v -e "$tool_path" "${url[0]}")
+      fi
     fi
     if [ "$status_code" = "200" ]; then
       if [ -n "$checksum" ] && ! verify_checksum "$tool_path" "$checksum"; then
@@ -293,19 +317,20 @@ add_composer_tool_helper() {
     if composer global show "$prefix$tool" "$tool_version" -a 2>&1 | grep -qE '^type *: *composer-plugin' && [ -n "$composer_args" ]; then
       composer global config --no-plugins allow-plugins."$prefix$tool" true >/dev/null 2>&1
     fi
-    composer global require "$prefix$release" "$composer_args" >/dev/null 2>&1
+    composer global require "$prefix$release" "$composer_args" >/dev/null 2>&1 || return 1
     composer global show "$prefix$tool" 2>&1 | grep -E ^versions | sudo tee /tmp/composer.log >/dev/null 2>&1
   else
     scoped_dir="$composer_bin/_tools/$tool-$(echo -n "$release" | shasum -a 256 | cut -d ' ' -f 1)"
-    if ! [ -d "$scoped_dir" ]; then
+    if ! [ -f "$scoped_dir/vendor/autoload.php" ]; then
       mkdir -p "$scoped_dir"
       echo '{}' | tee "$scoped_dir/composer.json" >/dev/null
       if composer show "$prefix$tool" "$tool_version" -d "$scoped_dir" -a 2>&1 | grep -qE '^type *: *composer-plugin' && [ -n "$composer_args" ]; then
         composer config -d "$scoped_dir" --no-plugins allow-plugins."$prefix$tool" true >/dev/null 2>&1
       fi
-      composer require "$prefix$release" -d "$scoped_dir" "$composer_args" >/dev/null 2>&1
-      composer show "$prefix$tool" -d "$scoped_dir" 2>&1 | grep -E ^versions | sudo tee /tmp/composer.log >/dev/null 2>&1
+      composer require "$prefix$release" -d "$scoped_dir" "$composer_args" >/dev/null 2>&1 || return 1
     fi
+    composer show "$prefix$tool" -d "$scoped_dir" 2>&1 | grep -E ^versions | sudo tee /tmp/composer.log >/dev/null 2>&1
+    [ -s /tmp/composer.log ] || return 1
     add_path "$scoped_dir"/vendor/bin
   fi
 }
@@ -316,6 +341,7 @@ add_composer_tool() {
   release=$2
   prefix=$3
   scope=$4
+  local fallback_url=${5:-} fallback_version_parameter=${6:-}
   composer_args=
   composer_major_version=$(cut -d'.' -f 1 /tmp/composer_version)
   if [ "$composer_major_version" != "1" ]; then
@@ -326,11 +352,17 @@ add_composer_tool() {
       return
     fi
   fi
-  add_composer_tool_helper "$tool" "$release" "$prefix" "$scope" "$composer_args"
-  tool_version=$(get_tool_version cat /tmp/composer.log)
-  ([ -s /tmp/composer.log ] && add_log "$tick" "$tool" "Added $tool $tool_version"
-  ) || add_log "$cross" "$tool" "Could not setup $tool"
-  add_tools_helper "$tool"
+  sudo rm -f /tmp/composer.log
+  if add_composer_tool_helper "$tool" "$release" "$prefix" "$scope" "$composer_args" && [ -s /tmp/composer.log ]; then
+    tool_version=$(get_tool_version cat /tmp/composer.log)
+    add_tools_helper "$tool"
+    add_log "$tick" "$tool" "Added $tool $tool_version"
+  elif [ -n "$fallback_url" ]; then
+    add_log "!" "$tool" "Could not setup $tool using Composer. Falling back to PHAR."
+    add_tool "$fallback_url" "$tool" "$fallback_version_parameter"
+  else
+    add_log "$cross" "$tool" "Could not setup $tool"
+  fi
   if [ -e "$composer_bin/composer" ]; then
     sudo cp -a "$tool_path_dir/composer" "$composer_bin"
   fi

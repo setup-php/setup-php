@@ -1,6 +1,6 @@
-import * as fs from 'fs';
-import * as tools from '../src/tools';
-import {ToolData, ToolInput} from '../src/tools';
+import {jest} from '@jest/globals';
+import fs from 'fs';
+import type {ToolData, ToolInput} from '../src/tools.js';
 
 function getData(data: Partial<ToolData>): ToolData {
   const tool = data.tool || 'tool';
@@ -40,9 +40,9 @@ function unsetComposerAuthEnv(): void {
 /**
  * Mock fetch.ts
  */
-jest.mock('../src/fetch', () => ({
+jest.unstable_mockModule('../src/fetch.js', () => ({
   fetch: jest
-    .fn()
+    .fn<typeof import('../src/fetch.js').fetch>()
     .mockImplementation(
       async (url: string, token?: string): Promise<Record<string, string>> => {
         if (url.includes('deployer')) {
@@ -86,9 +86,9 @@ jest.mock('../src/fetch', () => ({
     )
 }));
 
-jest.mock('../src/packagist', () => ({
+jest.unstable_mockModule('../src/packagist.js', () => ({
   search: jest
-    .fn()
+    .fn<typeof import('../src/packagist.js').search>()
     .mockImplementation(
       async (
         package_name: string,
@@ -101,6 +101,10 @@ jest.mock('../src/packagist', () => ({
       }
     )
 }));
+
+const tools = await import('../src/tools.js');
+
+afterEach(() => jest.restoreAllMocks());
 
 describe('Tools tests', () => {
   it.each`
@@ -382,6 +386,56 @@ describe('Tools tests', () => {
   );
 
   it.each`
+    release               | resolved
+    ${'phpstan'}          | ${'latest/download'}
+    ${'phpstan:0.12.68'}  | ${'download/0.12.68'}
+    ${'phpstan:^0.12.68'} | ${'download/0.12.68'}
+    ${'phpstan:0.12'}     | ${'download/1.2.3'}
+    ${'phpstan:0.12.x'}   | ${'download/1.2.3'}
+    ${'phpstan:0.12.*'}   | ${'download/1.2.3'}
+  `(
+    'resolving PHPStan PHAR fallback for $release',
+    async ({release, resolved}) => {
+      unsetComposerAuthEnv();
+      for (const os of ['linux', 'darwin', 'win32']) {
+        const data = await tools.getData(release, '8.0', os);
+        const script = await tools.addPackage(data);
+        expect(script).toContain(
+          'scoped https://github.com/phpstan/phpstan/releases/' +
+            resolved +
+            '/phpstan.phar "-V"'
+        );
+        expect(data.type).toBe('composer');
+        expect(data.release).toContain('phpstan');
+      }
+    }
+  );
+
+  it('keeps Composer available when the fallback version lookup fails', async () => {
+    process.env['GITHUB_TOKEN'] = 'invalid_token';
+    const data = await tools.getData('phpstan:0.12', '8.0', 'linux');
+    expect(await tools.addPackage(data)).toBe(
+      'add_composer_tool phpstan "phpstan:0.12.*" phpstan/ scoped'
+    );
+    unsetComposerAuthEnv();
+  });
+
+  it('uses fallback settings independently of the Composer repository', async () => {
+    const data = await tools.getData('vendor/tool:1.2.3', '8.0', 'linux', {
+      fallback: {
+        type: 'phar',
+        repository: 'releases/tool',
+        domain: 'https://example.com',
+        extension: '.phar',
+        version_prefix: 'v'
+      }
+    });
+    expect(await tools.addPackage(data)).toBe(
+      'add_composer_tool tool tool:1.2.3 vendor/ global https://example.com/releases/tool/v1.2.3/tool.phar ""'
+    );
+  });
+
+  it.each`
     version     | php_version | os          | script
     ${'latest'} | ${'8.0'}    | ${'linux'}  | ${'add_tool https://github.com/phar-io/phive/releases/download/3.2.1/phive-3.2.1.phar phive'}
     ${'1.2.3'}  | ${'8.0'}    | ${'darwin'} | ${'add_tool https://github.com/phar-io/phive/releases/download/1.2.3/phive-1.2.3.phar phive'}
@@ -527,30 +581,11 @@ describe('Tools tests', () => {
   });
 
   it('checking affected composer version with CRLF ranges', async () => {
-    let affected = false;
-    let fixed = true;
-    await jest.isolateModulesAsync(async () => {
-      jest.doMock('fs', () => ({
-        ...jest.requireActual('fs'),
-        readFileSync: (
-          filePath: fs.PathOrFileDescriptor,
-          options?: unknown
-        ) => {
-          if (String(filePath).includes('composer-gh-auth-no-op')) {
-            return '1.0.0-0 1.10.28\r\n2.0.0-0 2.2.28\r\n2.3.0-0 2.9.8';
-          }
-          return (jest.requireActual('fs') as typeof fs).readFileSync(
-            filePath,
-            options as fs.ObjectEncodingOptions & {flag?: string}
-          );
-        }
-      }));
-      const isolatedTools = jest.requireActual<typeof tools>('../src/tools');
-      affected = isolatedTools.skipGitHubAuthForComposerVersion('2.9.7');
-      fixed = isolatedTools.skipGitHubAuthForComposerVersion('2.9.8');
-    });
-    expect(affected).toBe(true);
-    expect(fixed).toBe(false);
+    jest
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValue('1.0.0-0 1.10.28\r\n2.0.0-0 2.2.28\r\n2.3.0-0 2.9.8');
+    expect(tools.skipGitHubAuthForComposerVersion('2.9.7')).toBe(true);
+    expect(tools.skipGitHubAuthForComposerVersion('2.9.8')).toBe(false);
   });
 
   it.each`
@@ -655,7 +690,7 @@ describe('Tools tests', () => {
         'add_tool https://github.com/humbug/php-scoper/releases/latest/download/php-scoper.phar php-scoper "--version"',
         'add_tool https://github.com/phpDocumentor/phpDocumentor/releases/latest/download/phpDocumentor.phar phpDocumentor "--version"',
         'add_composer_tool phplint phplint overtrue/',
-        'add_tool https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar phpstan "-V"',
+        'add_composer_tool phpstan phpstan phpstan/ scoped',
         'add_tool https://phar.phpunit.de/phpunit-7.4.0.phar,https://phar.phpunit.de/phpunit-7.phar phpunit "--version"',
         'add_pecl',
         'add_tool https://www.phing.info/get/phing-latest.phar phing "-v"',
@@ -948,26 +983,14 @@ describe('Tools tests', () => {
       }
     });
 
-    let result: string = '';
-    await jest.isolateModulesAsync(async () => {
-      jest.doMock('fs', () => ({
-        ...jest.requireActual('fs'),
-        readFileSync: (
-          filePath: fs.PathOrFileDescriptor,
-          options?: unknown
-        ) => {
-          if (String(filePath).includes('tools.json')) {
-            return brokenToolsJson;
-          }
-          return (jest.requireActual('fs') as typeof fs).readFileSync(
-            filePath,
-            options as fs.ObjectEncodingOptions & {flag?: string}
-          );
-        }
-      }));
-      const isolatedTools = jest.requireActual<typeof tools>('../src/tools');
-      result = await isolatedTools.addTools('broken-tool', '7.4', 'linux');
+    const readFileSync = fs.readFileSync;
+    jest.spyOn(fs, 'readFileSync').mockImplementation((filePath, options) => {
+      if (String(filePath).includes('tools.json')) {
+        return brokenToolsJson;
+      }
+      return readFileSync(filePath, options);
     });
+    const result = await tools.addTools('broken-tool', '7.4', 'linux');
 
     expect(result).toContain(
       'add_log "$cross" "broken-tool" "broken-tool has no function defined. Please report this issue."'

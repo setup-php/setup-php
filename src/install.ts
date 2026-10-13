@@ -1,12 +1,15 @@
+import {fileURLToPath} from 'url';
 import path from 'path';
-import fs from 'fs';
 import {exec} from '@actions/exec';
-import * as config from './config';
-import * as core from './core';
-import * as coverage from './coverage';
-import * as extensions from './extensions';
-import * as tools from './tools';
-import * as utils from './utils';
+import fs from 'fs';
+import * as config from './config.js';
+import * as core from './core.js';
+import * as coverage from './coverage.js';
+import * as extensions from './extensions.js';
+import * as tools from './tools.js';
+import * as utils from './utils.js';
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Build the script
@@ -16,7 +19,7 @@ import * as utils from './utils';
 export async function getScript(os: string): Promise<string> {
   const url = 'https://setup-php.com/sponsor';
   const filename = os + (await utils.scriptExtension(os));
-  const script_path = path.join(__dirname, '../src/scripts', filename);
+  const script_path = path.join(dirname, '../src/scripts', filename);
   const run_path = script_path.replace(os, 'run');
   const extension_csv: string = utils.sanitizeShellInput(
     await utils.getInput('extensions', false),

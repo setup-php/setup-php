@@ -1,7 +1,10 @@
+import {fileURLToPath} from 'url';
 import fs from 'fs';
 import * as path from 'path';
-import * as core from './core';
-import * as fetch from './fetch';
+import * as core from './core.js';
+import * as fetch from './fetch.js';
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Function to read environment variable and return a string value.
@@ -88,12 +91,9 @@ export async function parseVersion(version: string): Promise<string> {
       if (!/^\d+(\.\d+){0,2}$/.test(version)) {
         throw new Error(`Invalid PHP version: ${version.slice(0, 20)}`);
       }
-      switch (true) {
-        case version.length > 1:
-          return version.slice(0, 3);
-        default:
-          return version + '.0';
-      }
+      return version.includes('.')
+        ? version.split('.').slice(0, 2).join('.')
+        : version + '.0';
   }
 }
 
@@ -480,7 +480,7 @@ export async function customPackage(
   const pkg_name: string = pkg.replace(/\d+|(pdo|pecl)[_-]|[_-]db2/, '');
   const script_extension: string = await scriptExtension(os);
   const script: string = path.join(
-    __dirname,
+    dirname,
     '../src/scripts/' + type + '/' + pkg_name + script_extension
   );
   const command: string = await getCommand(os, pkg_name);

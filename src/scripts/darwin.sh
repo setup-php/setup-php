@@ -168,8 +168,12 @@ patch_brew() {
 # Function to update dependencies.
 update_dependencies() {
   if ! [ -e /tmp/update_dependencies ]; then
-    for repo in "$brew_repo" "${core_repo:?}"; do
-      if [ -e "$repo" ]; then
+    local repos=("$brew_repo")
+    if [ -n "${HOMEBREW_NO_INSTALL_FROM_API:-}" ]; then
+      repos+=("${core_repo:?}")
+    fi
+    for repo in "${repos[@]}"; do
+      if [ -d "$repo" ]; then
         git_retry -C "$repo" fetch origin main && git -C "$repo" reset --hard origin/main || return $?
       fi
     done
@@ -199,7 +203,7 @@ setup_cached_versions() {
 
 # Function to setup PHP 5.6 and newer using Homebrew.
 add_php() {
-  local exit_code
+  local exit_code php_alias
   action=$1
   existing_version=$2
   suffix="$(get_php_formula_suffix)"
@@ -212,6 +216,12 @@ add_php() {
     fi
     update_dependencies
     add_brew_tap "$php_tap"
+  fi
+  # Resolve PHP aliases before invoking brew to avoid scanning unrelated installed formulae.
+  php_alias="$tap_dir/$php_tap/Aliases/$php_keg"
+  if [ -L "$php_alias" ]; then
+    php_keg="$(basename "$(readlink "$php_alias")" .rb)"
+    php_formula="shivammathur/php/$php_keg"
   fi
   if [[ "$existing_version" != "false" && -z "$suffix" ]]; then
     if [ "$action" = "upgrade" ]; then
@@ -335,7 +345,6 @@ export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_ENV_HINTS=1
 export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
-export HOMEBREW_NO_INSTALL_FROM_API=1
 
 # shellcheck source=.
 . "${scripts:?}"/unix.sh

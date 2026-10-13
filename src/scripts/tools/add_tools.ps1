@@ -237,6 +237,26 @@ Function Add-ToolsHelper() {
   }
 }
 
+# Function to find the newest stable release containing a tool asset.
+Function Get-LastRelease($url) {
+  $releases_url = $url.Split('/latest/download/')[0]
+  $asset = $url.Split('/')[-1]
+  $page = 1
+  do {
+    $releases = (Get-File -Url "${releases_url}?page=$page&q=prerelease%3Afalse").Content
+    foreach ($match in [regex]::Matches($releases, 'src="([^"]+/releases/expanded_assets/[^"]+)"')) {
+      $assets_url = $match.Groups[1].Value
+      if (-not $assets_url.StartsWith("$releases_url/expanded_assets/")) { continue }
+      $download_path = $assets_url.Substring('https://github.com'.Length).Replace('/expanded_assets/', '/download/') + "/$asset"
+      $assets = (Get-File -Url $assets_url).Content
+      if ($assets.Contains("href=`"$download_path`"")) {
+        return "https://github.com$download_path"
+      }
+    }
+    $page++
+  } while ($releases.Contains('class="next_page"'))
+}
+
 # Function to add tools.
 Function Add-Tool() {
   Param (
@@ -288,15 +308,17 @@ Function Add-Tool() {
       try {
         $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
       } catch {
-        if($url -match '.*github.com.*releases.*latest.*') {
+        $status_code = 0
+        if($url -match '^https://github\.com/[^/]+/[^/]+/releases/latest/download/[^/?#]+$') {
           try {
-            $url = $url.replace("releases/latest/download", "releases/download/" + ([regex]::match((Get-File -Url ($url.split('/release')[0] + "/releases")).Content, "([0-9]+\.[0-9]+\.[0-9]+)/" + ($url.Substring($url.LastIndexOf("/") + 1))).Groups[0].Value).split('/')[0])
-            $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
+            $release_url = Get-LastRelease $url
+            if ($release_url) {
+              $url = $release_url
+              $status_code = (Invoke-WebRequest -Passthru -Uri $url -OutFile $tool_path).StatusCode
+            }
           } catch {
             $status_code = 0
           }
-        } else {
-          $status_code = 0
         }
       }
       if($status_code -eq 200 -and (Test-Path $tool_path)) {
@@ -375,23 +397,33 @@ Function Add-ComposerToolHelper() {
       composer global config --no-plugins allow-plugins."$prefix$tool" true >$null 2>&1
     }
     composer global require $prefix$release $composer_args >$null 2>&1
+    if($LASTEXITCODE -ne 0) {
+      return
+    }
     return composer global show $prefix$tool 2>&1 | findstr '^versions'
   } else {
     $release_stream = [System.IO.MemoryStream]::New([System.Text.Encoding]::ASCII.GetBytes($release))
     $scoped_dir_suffix = (Get-FileHash -InputStream $release_stream -Algorithm sha256).Hash
     $scoped_dir = "$composer_bin\_tools\$tool-$scoped_dir_suffix"
     $unix_scoped_dir = $scoped_dir.replace('\', '/')
-    if(-not(Test-Path $scoped_dir)) {
+    if(-not(Test-Path $scoped_dir\vendor\autoload.php)) {
       New-Item -ItemType Directory -Force -Path $scoped_dir > $null 2>&1
       Set-Content -Path $scoped_dir\composer.json -Value "{}"
       if((composer show $prefix$tool $tool_version -d $unix_scoped_dir -a 2>&1 | findstr '^type *: *composer-plugin') -and ($composer_args -ne '')) {
         composer config -d $unix_scoped_dir --no-plugins allow-plugins."$prefix$tool" true >$null 2>&1
       }
       composer require $prefix$release -d $unix_scoped_dir $composer_args >$null 2>&1
+      if($LASTEXITCODE -ne 0) {
+        return
+      }
+    }
+    $log = composer show $prefix$tool -d $unix_scoped_dir 2>&1 | findstr '^versions'
+    if(-not $log) {
+      return
     }
     [System.Environment]::SetEnvironmentVariable(($tool.replace('-', '_') + '_bin'), "$scoped_dir\vendor\bin")
     Add-Path $scoped_dir\vendor\bin
-    return composer show $prefix$tool -d $unix_scoped_dir 2>&1 | findstr '^versions'
+    return $log
   }
 }
 
@@ -417,7 +449,13 @@ Function Add-ComposerTool() {
     [ValidateNotNull()]
     [ValidateLength(1, [int]::MaxValue)]
     [string]
-    $scope
+    $scope,
+    [Parameter(Position = 4, Mandatory = $false)]
+    [string]
+    $fallback_url,
+    [Parameter(Position = 5, Mandatory = $false)]
+    [string]
+    $fallback_version_parameter
   )
   $composer_args = ""
   if($composer_version.split('.')[0] -ne "1") {
@@ -433,10 +471,13 @@ Function Add-ComposerTool() {
   if(Test-Path $composer_bin\composer) {
     Copy-Item -Path "$bin_dir\composer" -Destination "$composer_bin\composer" -Force
   }
-  Add-ToolsHelper $tool
   if($log) {
     $tool_version = Get-ToolVersion "Write-Output" "$log"
+    Add-ToolsHelper $tool
     Add-Log $tick $tool "Added $tool $tool_version"
+  } elseif($fallback_url) {
+    Add-Log "!" $tool "Could not setup $tool using Composer. Falling back to PHAR."
+    Add-Tool $fallback_url $tool $fallback_version_parameter
   } else {
     Add-Log $cross $tool "Could not setup $tool"
   }
