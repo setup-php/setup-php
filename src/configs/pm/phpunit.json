@@ -3,21 +3,77 @@
     {
       "owner": "phpunit",
       "pattern": [
-        {
-          "regexp": "^\\d+\\)\\s.*$"
-        },
-        {
-          "regexp": "^(.*Failed\\sasserting\\sthat.*)$",
-          "message": 1
-        },
-        {
-          "regexp": "^\\s*$"
-        },
-        {
-          "regexp": "^(.*):(\\d+)$",
-          "file": 1,
-          "line": 2
-        }
+        { "regexp": "^\\d+\\)\\s.*$" },
+        { "regexp": "^(.*Failed\\sasserting\\sthat.*)$", "message": 1 },
+        { "regexp": "^\\s*$" },
+        { "regexp": "^(.*):(\\d+)$", "file": 1, "line": 2 }
+      ]
+    },
+    {
+      "owner": "phpunit-no-blank",
+      "pattern": [
+        { "regexp": "^\\d+\\)\\s.*$" },
+        { "regexp": "^(.*Failed\\sasserting\\sthat.*)$", "message": 1 },
+        { "regexp": "^(.*):(\\d+)$", "file": 1, "line": 2 }
+      ]
+    },
+    {
+      "owner": "phpunit-custom-message",
+      "pattern": [
+        { "regexp": "^\\d+\\)\\s.*$" },
+        { "regexp": "^(?!.*Failed\\sasserting)(.+)$", "message": 1 },
+        { "regexp": "^.*Failed\\sasserting\\sthat.*$" },
+        { "regexp": "^(.*):(\\d+)$", "file": 1, "line": 2 }
+      ]
+    },
+    {
+      "owner": "phpunit-custom-message-blank",
+      "pattern": [
+        { "regexp": "^\\d+\\)\\s.*$" },
+        { "regexp": "^(?!.*Failed\\sasserting)(.+)$", "message": 1 },
+        { "regexp": "^.*Failed\\sasserting\\sthat.*$" },
+        { "regexp": "^\\s*$" },
+        { "regexp": "^(.*):(\\d+)$", "file": 1, "line": 2 }
+      ]
+    },
+    {
+      "owner": "phpunit-other-blank",
+      "pattern": [
+        { "regexp": "^\\d+\\)\\s.*$" },
+        { "regexp": "^(?!.*Failed\\sasserting)(.+)$", "message": 1 },
+        { "regexp": "^(?:\\s*|[-+@ ].*)$" },
+        { "regexp": "^(.*):(\\d+)$", "file": 1, "line": 2 }
+      ]
+    },
+    {
+      "owner": "phpunit-other",
+      "pattern": [
+        { "regexp": "^\\d+\\)\\s.*$" },
+        { "regexp": "^(?!.*Failed\\sasserting)(.+)$", "message": 1 },
+        { "regexp": "^(.*):(\\d+)$", "file": 1, "line": 2 }
+      ]
+    },
+    {
+      "owner": "phpunit-warning",
+      "severity": "warning",
+      "pattern": [
+        { "regexp": "^There (?:was|were) \\d+ (?:(?:risky|skipped) tests?(?: suites?)?|(?:PHPUnit(?: test runner)? )?warnings?):$" },
+        { "regexp": "^(?:(\\s*(/.*|[A-Za-z]:[\\\\/].*):(\\d+)|(?!-+$|There (?:was|were) \\d+ .+:$|\\d+ tests? triggered \\d+ .+:$|OK(?: \\(\\d+ tests?, \\d+ assertions?\\)|, but (?:there were issues|some tests were skipped|incomplete, skipped, or risky tests)!)$|(?:FAILURES|ERRORS|WARNINGS)!$|Tests: \\d+(?:,|\\.?$)|PHPUnit \\d+\\.\\S+ by |Triggered by:$).*)|Triggered by:)$", "message": 1, "file": 2, "line": 3, "loop": true }
+      ]
+    },
+    {
+      "owner": "phpunit-notice",
+      "severity": "notice",
+      "pattern": [
+        { "regexp": "^There (?:was|were) \\d+ (?:incomplete tests?(?: suites?)?|(?:PHPUnit(?: test runner)? )?notices?):$" },
+        { "regexp": "^(?:(\\s*(/.*|[A-Za-z]:[\\\\/].*):(\\d+)|(?!-+$|There (?:was|were) \\d+ .+:$|\\d+ tests? triggered \\d+ .+:$|OK(?: \\(\\d+ tests?, \\d+ assertions?\\)|, but (?:there were issues|some tests were skipped|incomplete, skipped, or risky tests)!)$|(?:FAILURES|ERRORS|WARNINGS)!$|Tests: \\d+(?:,|\\.?$)|PHPUnit \\d+\\.\\S+ by |Triggered by:$).*)|Triggered by:)$", "message": 1, "file": 2, "line": 3, "loop": true }
+      ]
+    },
+    {
+      "owner": "phpunit-issue",
+      "pattern": [
+        { "regexp": "^\\d+ tests? triggered \\d+ (?:PHP(?:Unit)? )?(error|warning|notice)s?:$", "severity": 1 },
+        { "regexp": "^(?:\\d+\\)\\s)?(?:(\\s*(/.*|[A-Za-z]:[\\\\/].*):(\\d+)|(?!-+$|There (?:was|were) \\d+ .+:$|\\d+ tests? triggered \\d+ .+:$|OK(?: \\(\\d+ tests?, \\d+ assertions?\\)|, but (?:there were issues|some tests were skipped|incomplete, skipped, or risky tests)!)$|(?:FAILURES|ERRORS|WARNINGS)!$|Tests: \\d+(?:,|\\.?$)|PHPUnit \\d+\\.\\S+ by |Triggered by:$).*)|Triggered by:)$", "message": 1, "file": 2, "line": 3, "loop": true }
       ]
     }
   ]

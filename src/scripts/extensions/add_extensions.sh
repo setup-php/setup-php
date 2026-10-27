@@ -172,11 +172,11 @@ get_pecl_version() {
   pecl_rest='https://pecl.php.net/rest/r/'
   response=$(get -s -n "" "$pecl_rest$extension"/allreleases.xml)
   for state in "${states[@]}"; do
-    pecl_version=$(echo "$response" | grep -m 1 -Eio "($major_version\.[0-9]+\.[0-9]+${state}[0-9]+<)" | cut -d '<' -f 1)
-    [ -z "$pecl_version" ] && pecl_version=$(echo "$response" | grep -m 1 -Eio "v>(.*)<\/v>.*$state<" | grep -m 1 -Eo "($major_version\.[0-9]+\.[0-9]+.*)<" | cut -d '<' -f 1)
+    pecl_version=$(echo "$response" | grep -m 1 -Eio "v>($major_version\.[0-9]+(\.[0-9]+)?${state}[0-9]+<)" | cut -d '>' -f 2 | cut -d '<' -f 1)
+    [ -z "$pecl_version" ] && pecl_version=$(echo "$response" | grep -m 1 -Eio "v>(.*)<\/v>.*$state<" | grep -m 1 -Eo "v>($major_version\.[0-9]+(\.[0-9]+)?.*)<" | cut -d '>' -f 2 | cut -d '<' -f 1)
     [ -n "$pecl_version" ] && break;
   done
-  [ -z "$pecl_version" ] && pecl_version=$(echo "$response" | grep -m 1 -Eo "($major_version\.[0-9]+\.[0-9]+)<" | cut -d '<' -f 1)
+  [ -z "$pecl_version" ] && pecl_version=$(echo "$response" | grep -m 1 -Eo "v>($major_version\.[0-9]+(\.[0-9]+)?)<" | cut -d '>' -f 2 | cut -d '<' -f 1)
   echo "$pecl_version"
 }
 
@@ -234,12 +234,21 @@ add_pecl_extension() {
     [ -n "$pecl_version" ] && sudo rm -f "${ext_dir:?}/$extension-$pecl_version"
     [ -n "$pecl_version" ] && pecl_version="-$pecl_version"
     pecl_install "$extension$pecl_version" || ( [ "${fail_fast:?}" = "false" ] && add_extension "$extension" "$(get_extension_prefix "$extension")" >/dev/null 2>&1)
-    extension_version="$(php -r "echo phpversion('$extension');")"
+    if ! extension_version="$(php -d display_errors=0 -d display_startup_errors=0 -r "echo phpversion('$extension'); exit(extension_loaded('$extension') ? 0 : 1);" 2>/dev/null)"; then
+      add_log "${cross:?}" "$extension" "Could not install $extension on PHP ${semver:?}"
+      return
+    fi
+    if [ -n "$pecl_version" ] && [ "${extension_version/-/}" != "${pecl_version#-}" ]; then
+      [ "${fail_fast:?}" = "true" ] && add_log "${cross:?}" "$extension-$extension_version" "Installed and enabled, but $extension$pecl_version was requested"
+      add_log "!" "$extension-$extension_version" "Installed and enabled, but $extension$pecl_version was requested"
+      echo "::warning::Installed $extension-$extension_version, but $extension$pecl_version was requested"
+      return
+    fi
     if [ -n "$pecl_version" ] && [ "${extension_version/-/}" = "${pecl_version#-}" ]; then
-      sudo cp "${ext_dir:?}/$extension.so" "${ext_dir:?}/$extension-$extension_version" 2>/dev/null || true
+      sudo cp "${ext_dir:?}/$extension.so" "${ext_dir:?}/$extension$pecl_version" 2>/dev/null || true
     fi
     [ -n "$extension_version" ] && extension_version="-$extension_version"
-    add_extension_log "$extension$extension_version" "Installed and enabled"
+    add_log "${tick:?}" "$extension$extension_version" "Installed and enabled"
   fi
 }
 
