@@ -6,20 +6,15 @@ add_sudo() {
   fi
 }
 
-# Function to link apt-fast to apt-get
-link_apt_fast() {
-  if ! command -v apt-fast >/dev/null; then
-    sudo ln -sf /usr/bin/apt-get /usr/bin/apt-fast
-    trap "sudo rm -f /usr/bin/apt-fast 2>/dev/null" exit
-  fi
+# Function to select the package installer.
+set_apt_install() {
+  local apt=apt-get
+  command -v apt-fast >/dev/null && apt=apt-fast
+  apt_install="sudo $debconf_fix $apt install -y --no-install-recommends -o Dpkg::Options::=--force-confnew"
 }
 
 # Function to setup environment for self-hosted runners.
 self_hosted_helper() {
-  if ! command -v apt-fast >/dev/null; then
-    sudo ln -sf /usr/bin/apt-get /usr/bin/apt-fast
-    trap "sudo rm -f /usr/bin/apt-fast 2>/dev/null" exit
-  fi
   sudo mkdir -p /opt/hostedtoolcache >/dev/null 2>&1 || true
   local packages=()
   mapfile -t packages < <(filter_packages apt-transport-https ca-certificates curl file make jq unzip autoconf automake gcc g++ gnupg)
@@ -30,16 +25,12 @@ self_hosted_helper() {
 
 # Function to fix broken packages.
 fix_broken_packages() {
-  sudo apt --fix-broken install >/dev/null 2>&1
+  sudo apt --fix-broken install -o Dpkg::Options::=--force-confnew >/dev/null 2>&1
 }
 
 # Function to install a package
 install_packages() {
   packages=("$@")
-  if ! [ -e /etc/dpkg/dpkg.cfg.d/force-confnew ]; then
-    echo "force-confnew" | sudo tee /etc/dpkg/dpkg.cfg.d/force-confnew >/dev/null 2>&1
-    trap "sudo rm -f /etc/dpkg/dpkg.cfg.d/force-confnew 2>/dev/null" exit
-  fi
   $apt_install "${packages[@]}" >/dev/null 2>&1 || (update_lists && fix_broken_packages && $apt_install "${packages[@]}" >/dev/null 2>&1)
 }
 
@@ -357,11 +348,10 @@ version=${1:-'8.5'}
 ini=${2:-'production'}
 src=${0%/*}/..
 debconf_fix="DEBIAN_FRONTEND=noninteractive"
-apt_install="sudo $debconf_fix apt-fast install -y --no-install-recommends"
 scripts="$src"/scripts
 
 add_sudo >/dev/null 2>&1
-link_apt_fast >/dev/null 2>&1
+set_apt_install >/dev/null 2>&1
 
 . /etc/os-release
 # shellcheck source=.
