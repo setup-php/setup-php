@@ -5,7 +5,7 @@ export curl_opts=(-sL)
 export old_versions="5.[3-5]"
 export jit_versions="8.[0-9]"
 export php_builder_versions="8.[3-9]"
-export nightly_versions="8.[6-9]"
+export nightly_versions="8.[7-9]"
 export xdebug3_versions="7.[2-4]|8.[0-9]"
 export latest="releases/latest/download"
 export github="https://github.com/shivammathur"
@@ -185,6 +185,7 @@ verify_checksum() {
 # mode: -s pipe to stdout, -v save file and return status code
 # execute: -e save file as executable
 get() {
+  local download_status=1 status_code=000
   mode=$1
   execute=$2
   file_path=$3
@@ -204,12 +205,20 @@ get() {
       trap 'release_lock "$lock_path"' EXIT SIGINT SIGTERM
     fi
     for link in "${links[@]}"; do
-      status_code=$(sudo curl -w "%{http_code}" -o "$file_path" "${curl_opts[@]}" "$link")
-      [ "$status_code" = "200" ] && break
+      if status_code=$(sudo curl -w "%{http_code}" -o "$file_path" "${curl_opts[@]}" "$link"); then
+        if [ "$status_code" = "200" ]; then
+          download_status=0
+          break
+        fi
+      else
+        status_code=000
+      fi
     done
+    [ "$download_status" -ne 0 ] && sudo rm -f "$file_path"
     [[ "$execute" = "-e" && -e "$file_path" ]] && sudo chmod a+x "$file_path"
     [ "$mode" = "-v" ] && echo "$status_code"
     [ "$runner" = "self-hosted" ] && release_lock "$lock_path"
+    return "$download_status"
   fi
 }
 
